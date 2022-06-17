@@ -38,11 +38,13 @@ enum __SET_Type {
 };
 
 enum _SET_ErrorID {
-    SET_ERRORID_NONE = 0x300000000,
-    SET_ERRORID_CLEANSTRING_MALLOC = 0x300010200
+    _SET_ERRORID_NONE = 0x300000000,
+    _SET_ERRORID_CLEANSTRING_MALLOC = 0x300010200,
+    _SET_ERRORID_CLEANSTRING_REALLOC = 0x300010201
 };
 
-#define SET_ERRORMES_MALLOC "Unable to allocate memory"
+#define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
+#define _SET_ERRORMES_REALLOC "Unable to reallocate memory (Size: %lu)"
 
 typedef struct __SET_Setting SET_Setting;
 typedef union __SET_Data SET_Data;
@@ -89,7 +91,7 @@ struct __SET_Setting {
 
 // List of special characters which should ignore spaces
 uint32_t _SET_SpecialCharLength = 28;
-char _SET_SpecialCharLength[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<', '>', '!', '~', '|', '&', '\\', '$', '#', '@', '.', ',', '(', ')', '[', ']', '{', '}'};
+char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<', '>', '!', '~', '|', '&', '\\', '$', '#', '@', '.', ',', '(', ')', '[', ']', '{', '}'};
 
 // Removes newlines, tabs and leading/trailing spaces
 char *_SET_CleanString(char *String);
@@ -102,11 +104,12 @@ char *_SET_CleanString(char *String)
     extern uint32_t _SET_SpecialCharLength;
     extern char _SET_SpecialChar[];
 
-    char *NewString = (char *)malloc(sizeof(char) * (strlen(String) + 1));
+    size_t Size = strlen(String) + 1;
+    char *NewString = (char *)malloc(sizeof(char) * Size);
 
     if (NewString == NULL)
     {
-        _SET_AddErrorForeign(SET_ERRORID_CLEANSTRING_MALLOC, strerror(errno), SET_ERRORMES_MALLOC);
+        _SET_AddErrorForeign(_SET_ERRORID_CLEANSTRING_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(char) * Size);
         return NULL;
     }
 
@@ -214,7 +217,24 @@ char *_SET_CleanString(char *String)
         // End special character
         else
             StringSpecial = false;
+
+        // Add character to new string
+        *DstString++ = *Current;
     }
+
+    *DstString++ = '\0';
+
+    // Shorten string
+    Size = DstString - NewString;
+    NewString = (char *)realloc(NewString, sizeof(char) * Size);
+
+    if (NewString == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_CLEANSTRING_REALLOC, strerror(errno), _SET_ERRORMES_REALLOC, Size);
+        return NULL;
+    }
+
+    return NewString;
 }
 
 char **_SET_SplitString(char *String)
