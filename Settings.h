@@ -47,6 +47,8 @@ enum _SET_ErrorID {
 typedef struct __SET_Setting SET_Setting;
 typedef union __SET_Data SET_Data;
 typedef enum __SET_Type SET_Type;
+typedef struct __SET_DataName SET_DataName;
+typedef struct __SET_DataValue SET_DataValue;
 
 // The information for one field
 union __SET_Data {
@@ -85,6 +87,27 @@ struct __SET_Field {
 struct __SET_Setting {
     char **key; // Strings of keys for the inputs
     SET_Data *data; // The data for the keys
+};
+
+struct __SET_DataName {
+    char *type; // The data type the field should store
+    char *name; // The name of the field
+};
+
+struct __SET_DataValue {
+    char **values;
+    uint32_t count;
+};
+
+struct __SET_DataField {
+    SET_DataName *names;
+    SET_DataValue *values;
+    uint32_t count;
+};
+
+// A split string structure
+struct __SET_StringSegment {
+
 };
 
 // List of special characters which should ignore spaces
