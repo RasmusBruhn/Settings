@@ -40,7 +40,8 @@ enum __SET_Type {
 enum _SET_ErrorID {
     _SET_ERRORID_NONE = 0x300000000,
     _SET_ERRORID_CLEANSTRING_MALLOC = 0x300010200,
-    _SET_ERRORID_CLEANSTRING_REALLOC = 0x300010201
+    _SET_ERRORID_CLEANSTRING_REALLOC = 0x300010201,
+    _SET_ERRORID_SPLITSTRING_MALLOCSTRUCT = 0x300020200
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -49,8 +50,10 @@ enum _SET_ErrorID {
 typedef struct __SET_Setting SET_Setting;
 typedef union __SET_Data SET_Data;
 typedef enum __SET_Type SET_Type;
-typedef struct __SET_DataName SET_DataName;
-typedef struct __SET_DataValue SET_DataValue;
+typedef struct __SET_CodeName SET_CodeName;
+typedef union __SET_CodeValue SET_CodeValue;
+typedef struct __SET_CodeStruct SET_CodeStruct;
+typedef struct __SET_CodeList SET_CodeList;
 
 // The information for one field
 union __SET_Data {
@@ -91,25 +94,26 @@ struct __SET_Setting {
     SET_Data *data; // The data for the keys
 };
 
-struct __SET_DataName {
+struct __SET_CodeName {
     char *type; // The data type the field should store
     char *name; // The name of the field
 };
 
-struct __SET_DataValue {
-    char **values;
-    uint32_t count;
+struct __SET_CodeList {
+    SET_CodeValue *list; // A list of values
+    uint32_t count; // The number of elements
 };
 
-struct __SET_DataField {
-    SET_DataName *names;
-    SET_DataValue *values;
-    uint32_t count;
+union __SET_CodeValue {
+    char *value; // The string containing the value
+    SET_CodeList *list; // A pointer to a list
+    SET_CodeStruct *sub; // A pointer to a substruct
 };
 
-// A split string structure
-struct __SET_StringSegment {
-
+struct __SET_CodeStruct {
+    SET_CodeName *names; // A list of the names of the fields
+    SET_CodeValue *values; // A list of the values of the fields
+    uint32_t count; // The number of fields
 };
 
 // List of special characters which should ignore spaces
@@ -119,8 +123,14 @@ char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<'
 // Removes newlines, tabs and leading/trailing spaces
 char *_SET_CleanString(char *String);
 
-// Split string in lines, removing leading and trailing white space and any newlines
-char **_SET_SplitString(char *String);
+// Split string into field names and values
+SET_CodeStruct *_SET_SplitString(char *String);
+
+// Initialize structs
+void _SET_InitStructCodeStruct(SET_CodeStruct *Struct);
+void _SET_InitStructCodeName(SET_CodeName *Struct);
+void _SET_InitStructCodeValue(SET_CodeValue *Struct);
+void _SET_InitStructCodeList(SET_CodeList *Struct);
 
 char *_SET_CleanString(char *String)
 {
@@ -138,6 +148,7 @@ char *_SET_CleanString(char *String)
 
     // Go through string
     bool InString = false;
+    bool InChar = false;
     bool StringSpecial = false;
     bool Leading = true;
     char *DstString = NewString;
@@ -175,8 +186,18 @@ char *_SET_CleanString(char *String)
         if (*Current == '\n' || *Current == '\t')
             continue;
 
+        // Remove leading spaces
+        if (Leading)
+        {
+            if (*Current == ' ')
+                continue;
+
+            else
+                Leading = false;
+        }
+
         // Do stuff outside of strings
-        if (!InString)
+        if (!InString && !InChar)
         {
             // Start comments
             if (*Current == '/')
@@ -200,15 +221,9 @@ char *_SET_CleanString(char *String)
             if (*Current == '\"')
                 InString = true;
 
-            // Remove leading spaces
-            if (Leading)
-            {
-                if (*Current == ' ')
-                    continue;
-
-                else
-                    Leading = false;
-            }
+            // Start char
+            if (*Current == '\'')
+                InChar = true;
 
             // Find space ignoring characters
             for (SpecialCharList = _SET_SpecialChar; SpecialCharList < EndSpecialCharList; ++SpecialCharList)
@@ -235,6 +250,10 @@ char *_SET_CleanString(char *String)
             // End the string
             if (*Current == '\"')
                 InString = false;
+
+            // End the char
+            if (*Current == '\'')
+                InChar = false;
         }
 
         // End special character
@@ -260,17 +279,81 @@ char *_SET_CleanString(char *String)
     return NewString;
 }
 
-char **_SET_SplitString(char *String)
+SET_CodeStruct *_SET_SplitString(char *String)
 {
-    // Setup list
-    char **List = NULL;
-    size_t Size = 0;
+    // Get memory for the struct
+    SET_CodeStruct *CodeStruct = (SET_CodeStruct *)malloc(sizeof(SET_CodeStruct));
 
-    // If it is currently inside a string or inside a field
+    if (CodeStruct == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_SPLITSTRING_MALLOCSTRUCT, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_CodeStruct));
+        return NULL;
+    }
+
+    _SET_InitStructCodeStruct(CodeStruct);
+
+    // Go through the string and split it
+    int32_t ListCount = 0;
+    int32_t StructCount = 0;
     bool InString = false;
-    int32_t InField = 0;
+    bool StringSpecial = false;
+    bool FoundType = false;
+    bool AfterEqual = 0;
 
+    for (char *Current = String, *LastStart = String; *Current != '\0'; ++Current)
+    {
+        // Start a string
+        if (*Current == '\"')
+            InString = !InString;
 
+        if (InString)
+        {
+            // Do special character
+            if (*Current == '\\' && *(Current + 1) != '\0')
+                ++Current;
+
+            continue;
+        }
+
+        // Start or end list and structs
+        if (*Current == '[')
+            ++ListCount;
+
+        else if (*Current == ']')
+            --ListCount;
+
+        else if (*Current == '{')
+            ++StructCount;
+
+        else if (*Current == '}')
+            --StructCount;
+
+        
+    }
+}
+
+void _SET_InitStructCodeStruct(SET_CodeStruct *Struct)
+{
+    Struct->names = NULL;
+    Struct->values = NULL;
+    Struct->count = 0;
+}
+
+void _SET_InitStructCodeName(SET_CodeName *Struct)
+{
+    Struct->name = NULL;
+    Struct->type = NULL;
+}
+
+void _SET_InitStructCodeValue(SET_CodeValue *Struct)
+{
+    Struct->value = NULL;
+}
+
+void _SET_InitStructCodeList(SET_CodeList *Struct)
+{
+    Struct->list = NULL;
+    Struct->count = 0;
 }
 
 #endif
