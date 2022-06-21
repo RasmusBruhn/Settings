@@ -43,6 +43,19 @@ enum _SET_ErrorID {
     _SET_ERRORID_CLEANSTRING_REALLOC = 0x300010201,
     _SET_ERRORID_SPLITSTRING_MALLOCSTRUCT = 0x300020200,
     _SET_ERRORID_SPLITSTRING_STOPCHAR = 0x300020201,
+    _SET_ERRORID_SPLITSTRING_NOSTOPCHAR = 0x300020202,
+    _SET_ERRORID_SPLITSTRING_SPACEINVALUE = 0x300020203,
+    _SET_ERRORID_SPLITSTRING_TYPETWICE = 0x300020204,
+    _SET_ERRORID_SPLITSTRING_VALUETWICE = 0x300020205,
+    _SET_ERRORID_SPLITSTRING_NOVALUE = 0x300020206,
+    _SET_ERRORID_SPLITSTRING_REALLOC = 0x300020207,
+    _SET_ERRORID_SPLITSTRING_REALLOC2 = 0x300020208,
+    _SET_ERRORID_SPLITSTRING_END = 0x300020209,
+    _SET_ERRORID_SPLITSTRING_ENDSTRUCT = 0x30002020A,
+    _SET_ERRORID_SPLITSTRING_MALLOCERROR = 0x30002020B,
+    _SET_ERRORID_SPLITSTRING_CREATESUBSTRUCT = 0x30002020C,
+    _SET_ERRORID_SPLITSTRING_ENDLIST = 0x30002020D,
+    _SET_ERRORID_SPLITSTRING_CREATELIST = 0x30002020E,
     _SET_ERRORID_CREATELINEMES_MALLOC = 0x300030200,
     _SET_ERRORID_DESTROYCODEVALUE_KEY = 0x300040100,
     _SET_ERRORID_DESTROYCODESTRUCT_NULL = 0x300050100
@@ -50,9 +63,19 @@ enum _SET_ErrorID {
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
 #define _SET_ERRORMES_REALLOC "Unable to reallocate memory (Size: %lu)"
-#define _SET_ERRORMES_EARLYSTOPCHAR "File stopped unexpectedly inside char definition (%s)"
+#define _SET_ERRORMES_EARLYSTOPCHAR "File ended unexpectedly inside char definition"
+#define _SET_ERRORMES_NOSTOPCHAR "Expected a maximum of one character in char definition (%s)"
 #define _SET_ERRORMES_VALUEKEY "Unknown value key (%u)"
 #define _SET_ERRORMES_FIELDNULL "A field is NULL"
+#define _SET_ERRORMES_SPACEINVALUE "Found unexpected space in value (%s)"
+#define _SET_ERRORMES_TYPETWICE "Found two type definitions (%s)"
+#define _SET_ERRORMES_VALUETWICE "Found two values (%s)"
+#define _SET_ERRORMES_NOVALUE "Found no values (%s)"
+#define _SET_ERRORMES_WRONGEND "File ended unexpectedly"
+#define _SET_ERRORMES_ENDSTRUCT "Expected } to end struct definition (%s)"
+#define _SET_ERRORMES_SUBSTRUCT "Unable to split substruct"
+#define _SET_ERRORMES_ENDLIST "Expected ] to end list definition (%s)"
+#define _SET_ERRORMES_SUBLIST "Unable to split list"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -121,7 +144,7 @@ struct __SET_CodeList {
 
 union ___SET_CodeValue {
     char *value; // The string containing the value
-    SET_CodeList list; // A list of strings with values
+    SET_CodeList *list; // A list of strings with values
     SET_CodeStruct *sub; // A pointer to a substruct
 };
 
@@ -149,7 +172,13 @@ char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<'
 char *_SET_CleanString(char *String);
 
 // Creates a line message
-char *_SET_CreateLineMes(uint32_t Line);
+char *_SET_CreateLineMes(char *PreMes, uint32_t Line);
+
+// Splits a value up if needed
+bool *_SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line);
+
+// Splits a list into int's components
+SET_CodeList *_SET_SplitList(char *String, char *ErrorLine);
 
 // Split string into field names and values
 SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine);
@@ -311,10 +340,10 @@ char *_SET_CleanString(char *String)
     return NewString;
 }
 
-char *_SET_CreateLineMes(uint32_t Line)
+char *_SET_CreateLineMes(char *PreMes, uint32_t Line)
 {
     // Find length
-    size_t Length = _SET_LINEPRELEN + 1;
+    size_t Length = _SET_LINEPRELEN + strlen(PreMes) + 1;
     uint32_t CountLine = Line;
 
     while (CountLine != 0)
@@ -333,7 +362,7 @@ char *_SET_CreateLineMes(uint32_t Line)
     }
 
     // Write message
-    sprintf(Mes, _SET_LINEPREMES "%u", Line);
+    sprintf(Mes, "%s" _SET_LINEPREMES "%u", PreMes, Line);
 
     return Mes;
 }
@@ -352,15 +381,16 @@ SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
     SET_InitStructCodeStruct(CodeStruct);
 
     // Go through the string and split it
+    char *TypeString = NULL;
+    char *NameString = NULL;
+    char *Current = String;
     int32_t ListCount = 0;
     int32_t StructCount = 0;
     bool InString = false;
-    bool StringSpecial = false;
     bool FoundType = false;
-    bool AfterEqual = 0;
-    uint32_t Line = 0;
+    bool AfterEqual = false;
 
-    for (char *Current = String, *LastStart = String; *Current != '\0'; ++Current)
+    for (char *LastStart = String; *Current != '\0'; ++Current)
     {
         // Start or end a string
         if (*Current == '\"')
@@ -389,11 +419,24 @@ SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
             {
                 SET_DestroyCodeStruct(CodeStruct);
                 free(CodeStruct);
-                char *LineMes = _SET_CreateLineMes(Line);
-                _SET_SetError(_SET_ERRORID_SPLITSTRING_STOPCHAR, _SET_ERRORMES_EARLYSTOPCHAR, LineMes);
+                _SET_SetError(_SET_ERRORID_SPLITSTRING_STOPCHAR, _SET_ERRORMES_EARLYSTOPCHAR);
+                return NULL;
+            }
+
+            // Make sure it ends
+            if (*(Current + WithSpecial + 2) != '\'')
+            {
+                char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                SET_DestroyCodeStruct(CodeStruct);
+                free(CodeStruct);
+                _SET_SetError(_SET_ERRORID_SPLITSTRING_NOSTOPCHAR, _SET_ERRORMES_NOSTOPCHAR, LineMes);
                 free(LineMes);
                 return NULL;
             }
+
+            // Skip till the end
+            Current += 2 + WithSpecial;
+            continue;
         }
 
         // Start or end list and structs
@@ -409,8 +452,214 @@ SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
         else if (*Current == '}')
             --StructCount;
 
+        // Do the rest
+        else if (ListCount == 0 && StructCount == 0)
+        {
+            // Look for type-name separator
+            if (*Current == ' ')
+            {
+                // if there is an error
+                if (AfterEqual)
+                {
+                    char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                    SET_DestroyCodeStruct(CodeStruct);
+                    free(CodeStruct);
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_SPACEINVALUE, _SET_ERRORMES_SPACEINVALUE, LineMes);
+                    free(LineMes);
+                    return NULL;
+                }
+
+                if (FoundType)
+                {
+                    char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                    SET_DestroyCodeStruct(CodeStruct);
+                    free(CodeStruct);
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_TYPETWICE, _SET_ERRORMES_TYPETWICE, LineMes);
+                    free(LineMes);
+                    return NULL;
+                }
+
+                // Add the type
+                TypeString = LastStart;
+                LastStart = Current + 1;
+                *Current = '\0';
+                FoundType = true;
+                continue;
+            }
+
+            // Look for name-value separator
+            if (*Current == '=')
+            {
+                // If there is an error
+                if (AfterEqual)
+                {
+                    char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                    SET_DestroyCodeStruct(CodeStruct);
+                    free(CodeStruct);
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_VALUETWICE, _SET_ERRORMES_VALUETWICE, LineMes);
+                    free(LineMes);
+                    return NULL;
+                }
+
+                // Add name
+                NameString = LastStart;
+                LastStart = Current + 1;
+                *Current = '\0';
+                AfterEqual = true;
+                continue;
+            }
+
+            // Look for line stop
+            if (*Current == ';')
+            {
+                // If there is an error
+                if (!AfterEqual)
+                {
+                    char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                    SET_DestroyCodeStruct(CodeStruct);
+                    free(CodeStruct);
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_NOVALUE, _SET_ERRORMES_NOVALUE, LineMes);
+                    free(LineMes);
+                    return NULL;
+                }
+
+                // Allocate memory for new line
+                SET_CodeName *NewNames = (SET_CodeName *)realloc(CodeStruct->names, sizeof(SET_CodeName) * (CodeStruct->count + 1));
+
+                if (NewNames == NULL)
+                {
+                    SET_DestroyCodeStruct(CodeStruct);
+                    free(CodeStruct);
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_REALLOC, _SET_ERRORMES_REALLOC, sizeof(SET_CodeName) * (CodeStruct->count + 1));
+                    return NULL;
+                }
+
+                CodeStruct->names = NewNames;
+
+                SET_CodeValue *NewValues = (SET_CodeValue *)realloc(CodeStruct->values, sizeof(SET_CodeValue) * (CodeStruct->count + 1));
+
+                if (NewValues == NULL)
+                {
+                    SET_DestroyCodeStruct(CodeStruct);
+                    free(CodeStruct);
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_REALLOC2, _SET_ERRORMES_REALLOC, sizeof(SET_CodeValue) * (CodeStruct->count + 1));
+                    return NULL;
+                }
+
+                CodeStruct->values = NewValues;
+
+                // Add the new line
+                NewValues[CodeStruct->count].type = SET_VALUETYPE_VALUE;
+                NewValues[CodeStruct->count].value.value = LastStart;
+                NewNames[CodeStruct->count].type = TypeString;
+                NewNames[CodeStruct->count++].name = NameString;
+
+                // Update the string
+                LastStart = Current + 1;
+                *Current = '\0';
+                AfterEqual = false;
+                FoundType = false;
+                TypeString = NULL;
+                NameString = NULL;
+                continue;
+            }
+        }
+    }
+
+    // Make sure it ended with a line end
+    if (*(Current - 1) != '\0' || FoundType || AfterEqual)
+    {
+        SET_DestroyCodeStruct(CodeStruct);
+        free(CodeStruct);
+        _SET_SetError(_SET_ERRORID_SPLITSTRING_END, _SET_ERRORMES_WRONGEND);
+        return NULL;
+    }
+
+    // Create new error line
+    size_t ErrorLength = strlen(ErrorLine) + _SET_LINEADDLEN + 1;
+    char *NewErrorLine = (char *)malloc(sizeof(char) * ErrorLength);
+
+    if (NewErrorLine == NULL)
+    {
+        SET_DestroyCodeStruct(CodeStruct);
+        free(CodeStruct);
+        _SET_SetError(_SET_ERRORID_SPLITSTRING_MALLOCERROR, _SET_ERRORMES_MALLOC, sizeof(SET_CodeValue) * ErrorLength);
+        return NULL;
+    }
+
+    sprintf(NewErrorLine, "%s" _SET_LINEADDMES, ErrorLine);
+
+    // Convert values into structs and lists
+    for (SET_CodeValue *List = CodeStruct->values, *EndList = CodeStruct->values + CodeStruct->count; List < EndList; ++List)
+    {
         
     }
+
+    // Return the struct
+    return CodeStruct;
+}
+
+bool *_SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line)
+{
+    // Check for a structs
+    if (*Value->value.value == '{')
+    {
+        // Make sure it ends with }
+        size_t Length = strlen(Value->value.value);
+
+        if (Value->value.value[Length - 1] != '}')
+        {
+            char *LineMes = _SET_CreateLineMes(ErrorLine, Line);
+            _SET_SetError(_SET_ERRORID_SPLITSTRING_ENDSTRUCT, _SET_ERRORMES_ENDSTRUCT, LineMes);
+            free(LineMes);
+            return false;
+        }
+
+        // Split the struct
+        Value->value.value[Length - 1] = '\0';
+        SET_CodeStruct *StructValue = _SET_SplitString(Value->value.value + 1, ErrorLine);
+
+        if (StructValue == NULL)
+        {
+            _SET_AddError(_SET_ERRORID_SPLITSTRING_CREATESUBSTRUCT, _SET_ERRORMES_SUBSTRUCT);
+            return false;
+        }
+
+        // Update the value
+        Value->type = SET_VALUETYPE_STRUCT;
+        Value->value.sub = StructValue;
+    }
+
+    // Check for a list
+    else if (*Value->value.value == '[')
+    {
+        // Make sure it ends with ]
+        size_t Length = strlen(Value->value.value);
+
+        if (Value->value.value[Length - 1] != ']')
+        {
+            char *LineMes = _SET_CreateLineMes(ErrorLine, Line);
+            _SET_SetError(_SET_ERRORID_SPLITSTRING_ENDLIST, _SET_ERRORMES_ENDLIST, LineMes);
+            free(LineMes);
+            return false;
+        }
+
+        // Split the list
+        Value->value.value[Length - 1] = '\0';
+        SET_CodeList *ListValues = _SET_SplitList(Value->value.value + 1, ErrorLine);
+
+        if (ListValues == NULL)
+        {
+            _SET_AddError(_SET_ERRORID_SPLITSTRING_CREATELIST, _SET_ERRORMES_SUBLIST);
+            return false;
+        }
+
+        // Update the value
+        Value->type = SET_VALUETYPE_LIST;
+        Value->value.list = ListValues;
+    }
+
+    return true;
 }
 
 void SET_InitStructCodeStruct(SET_CodeStruct *Struct)
@@ -450,16 +699,8 @@ void SET_DestroyCodeStruct(SET_CodeStruct *Struct)
     }
 
     // Go through all of the elements
-    for (uint32_t Pos = 0; Pos < Struct->count; ++Pos)
-    {
-        if (Struct->names[Pos].type != NULL)
-            free(Struct->names[Pos].type);
-
-        if (Struct->names[Pos].name != NULL)
-            free(Struct->names[Pos].name);
-
-        SET_DestroyCodeValue(Struct->values + Pos);
-    }
+    for (SET_CodeStruct *List = Struct->values, *EndList = Struct->values + Struct->count; List < EndList; ++List)
+        SET_DestroyCodeValue(List);
 
     free(Struct->names);
     free(Struct->values);
@@ -470,17 +711,20 @@ void SET_DestroyCodeValue(SET_CodeValue *Struct)
     switch (Struct->type)
     {
         case SET_VALUETYPE_VALUE:
-            if (Struct->value.value != NULL)
-                free(Struct->value.value);
             break;
 
         case SET_VALUETYPE_LIST:
-            if (Struct->value.list.list != NULL)
+            if (Struct->value.list != NULL)
             {
-                for (SET_CodeValue *List = Struct->value.list.list, *EndList = Struct->value.list.list + Struct->value.list.count; List < EndList; ++List)
-                    SET_DestroyCodeValue(List);
+                if (Struct->value.list->list != NULL)
+                {
+                    for (SET_CodeValue *List = Struct->value.list->list, *EndList = Struct->value.list->list + Struct->value.list->count; List < EndList; ++List)
+                        SET_DestroyCodeValue(List);
 
-                free(Struct->value.list.list);
+                    free(Struct->value.list->list);
+                }
+
+                free(Struct->value.list);
             }
             break;
 
