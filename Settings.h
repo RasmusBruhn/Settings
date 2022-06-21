@@ -41,17 +41,32 @@ enum _SET_ErrorID {
     _SET_ERRORID_NONE = 0x300000000,
     _SET_ERRORID_CLEANSTRING_MALLOC = 0x300010200,
     _SET_ERRORID_CLEANSTRING_REALLOC = 0x300010201,
-    _SET_ERRORID_SPLITSTRING_MALLOCSTRUCT = 0x300020200
+    _SET_ERRORID_SPLITSTRING_MALLOCSTRUCT = 0x300020200,
+    _SET_ERRORID_SPLITSTRING_STOPCHAR = 0x300020201,
+    _SET_ERRORID_CREATELINEMES_MALLOC = 0x300030200,
+    _SET_ERRORID_DESTROYCODEVALUE_KEY = 0x300040100,
+    _SET_ERRORID_DESTROYCODESTRUCT_NULL = 0x300050100
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
 #define _SET_ERRORMES_REALLOC "Unable to reallocate memory (Size: %lu)"
+#define _SET_ERRORMES_EARLYSTOPCHAR "File stopped unexpectedly inside char definition (%s)"
+#define _SET_ERRORMES_VALUEKEY "Unknown value key (%u)"
+#define _SET_ERRORMES_FIELDNULL "A field is NULL"
+
+enum __SET_ValueType {
+    SET_VALUETYPE_VALUE,
+    SET_VALUETYPE_LIST,
+    SET_VALUETYPE_STRUCT
+};
 
 typedef struct __SET_Setting SET_Setting;
 typedef union __SET_Data SET_Data;
 typedef enum __SET_Type SET_Type;
+typedef enum __SET_ValueType SET_ValueType;
 typedef struct __SET_CodeName SET_CodeName;
-typedef union __SET_CodeValue SET_CodeValue;
+typedef struct __SET_CodeValue SET_CodeValue;
+typedef union ___SET_CodeValue _SET_CodeValue;
 typedef struct __SET_CodeStruct SET_CodeStruct;
 typedef struct __SET_CodeList SET_CodeList;
 
@@ -104,10 +119,15 @@ struct __SET_CodeList {
     uint32_t count; // The number of elements
 };
 
-union __SET_CodeValue {
+union ___SET_CodeValue {
     char *value; // The string containing the value
-    SET_CodeList *list; // A pointer to a list
+    SET_CodeList list; // A list of strings with values
     SET_CodeStruct *sub; // A pointer to a substruct
+};
+
+struct __SET_CodeValue {
+    SET_ValueType type; // The type of value to store
+    _SET_CodeValue value; // The stored value
 };
 
 struct __SET_CodeStruct {
@@ -120,17 +140,29 @@ struct __SET_CodeStruct {
 uint32_t _SET_SpecialCharLength = 28;
 char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<', '>', '!', '~', '|', '&', '\\', '$', '#', '@', '.', ',', '(', ')', '[', ']', '{', '}'};
 
+#define _SET_LINEPREMES "Line "
+#define _SET_LINEPRELEN 5
+#define _SET_LINEADDMES " -> "
+#define _SET_LINEADDLEN 4
+
 // Removes newlines, tabs and leading/trailing spaces
 char *_SET_CleanString(char *String);
 
+// Creates a line message
+char *_SET_CreateLineMes(uint32_t Line);
+
 // Split string into field names and values
-SET_CodeStruct *_SET_SplitString(char *String);
+SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine);
 
 // Initialize structs
-void _SET_InitStructCodeStruct(SET_CodeStruct *Struct);
-void _SET_InitStructCodeName(SET_CodeName *Struct);
-void _SET_InitStructCodeValue(SET_CodeValue *Struct);
-void _SET_InitStructCodeList(SET_CodeList *Struct);
+void SET_InitStructCodeStruct(SET_CodeStruct *Struct);
+void SET_InitStructCodeName(SET_CodeName *Struct);
+void SET_InitStructCodeValue(SET_CodeValue *Struct);
+void SET_InitStructCodeList(SET_CodeList *Struct);
+
+// Destroy struct
+void SET_DestroyCodeStruct(SET_CodeStruct *Struct);
+void SET_DestroyCodeValue(SET_CodeValue *Struct);
 
 char *_SET_CleanString(char *String)
 {
@@ -279,7 +311,34 @@ char *_SET_CleanString(char *String)
     return NewString;
 }
 
-SET_CodeStruct *_SET_SplitString(char *String)
+char *_SET_CreateLineMes(uint32_t Line)
+{
+    // Find length
+    size_t Length = _SET_LINEPRELEN + 1;
+    uint32_t CountLine = Line;
+
+    while (CountLine != 0)
+    {
+        ++Length;
+        CountLine /= 10;
+    }
+
+    // Allocate memory
+    char *Mes = (char *)malloc(sizeof(char) * Length);
+
+    if (Mes == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_CREATELINEMES_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(char) * Length);
+        return NULL;
+    }
+
+    // Write message
+    sprintf(Mes, _SET_LINEPREMES "%u", Line);
+
+    return Mes;
+}
+
+SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
 {
     // Get memory for the struct
     SET_CodeStruct *CodeStruct = (SET_CodeStruct *)malloc(sizeof(SET_CodeStruct));
@@ -290,7 +349,7 @@ SET_CodeStruct *_SET_SplitString(char *String)
         return NULL;
     }
 
-    _SET_InitStructCodeStruct(CodeStruct);
+    SET_InitStructCodeStruct(CodeStruct);
 
     // Go through the string and split it
     int32_t ListCount = 0;
@@ -299,10 +358,11 @@ SET_CodeStruct *_SET_SplitString(char *String)
     bool StringSpecial = false;
     bool FoundType = false;
     bool AfterEqual = 0;
+    uint32_t Line = 0;
 
     for (char *Current = String, *LastStart = String; *Current != '\0'; ++Current)
     {
-        // Start a string
+        // Start or end a string
         if (*Current == '\"')
             InString = !InString;
 
@@ -313,6 +373,27 @@ SET_CodeStruct *_SET_SplitString(char *String)
                 ++Current;
 
             continue;
+        }
+
+        // Skip a char
+        if (*Current == '\'')
+        {
+            uint32_t WithSpecial = 0;
+
+            // With special character
+            if (*(Current + 1) == '\\')
+                WithSpecial = 1;
+
+            // Test if it stops
+            if (*(Current + WithSpecial + 1) == '\0')
+            {
+                SET_DestroyCodeStruct(CodeStruct);
+                free(CodeStruct);
+                char *LineMes = _SET_CreateLineMes(Line);
+                _SET_SetError(_SET_ERRORID_SPLITSTRING_STOPCHAR, _SET_ERRORMES_EARLYSTOPCHAR, LineMes);
+                free(LineMes);
+                return NULL;
+            }
         }
 
         // Start or end list and structs
@@ -332,28 +413,89 @@ SET_CodeStruct *_SET_SplitString(char *String)
     }
 }
 
-void _SET_InitStructCodeStruct(SET_CodeStruct *Struct)
+void SET_InitStructCodeStruct(SET_CodeStruct *Struct)
 {
     Struct->names = NULL;
     Struct->values = NULL;
     Struct->count = 0;
 }
 
-void _SET_InitStructCodeName(SET_CodeName *Struct)
+void SET_InitStructCodeName(SET_CodeName *Struct)
 {
     Struct->name = NULL;
     Struct->type = NULL;
 }
 
-void _SET_InitStructCodeValue(SET_CodeValue *Struct)
+void SET_InitStructCodeValue(SET_CodeValue *Struct)
 {
-    Struct->value = NULL;
+    Struct->type = SET_VALUETYPE_VALUE;
+    Struct->value.value = NULL;
 }
 
-void _SET_InitStructCodeList(SET_CodeList *Struct)
+void SET_InitStructCodeList(SET_CodeList *Struct)
 {
     Struct->list = NULL;
     Struct->count = 0;
+}
+
+void SET_DestroyCodeStruct(SET_CodeStruct *Struct)
+{
+    if (Struct->count == 0)
+        return;
+
+    if (Struct->names == NULL || Struct->values == NULL)
+    {
+        _SET_SetError(_SET_ERRORID_DESTROYCODESTRUCT_NULL, _SET_ERRORMES_FIELDNULL);
+        return;
+    }
+
+    // Go through all of the elements
+    for (uint32_t Pos = 0; Pos < Struct->count; ++Pos)
+    {
+        if (Struct->names[Pos].type != NULL)
+            free(Struct->names[Pos].type);
+
+        if (Struct->names[Pos].name != NULL)
+            free(Struct->names[Pos].name);
+
+        SET_DestroyCodeValue(Struct->values + Pos);
+    }
+
+    free(Struct->names);
+    free(Struct->values);
+}
+
+void SET_DestroyCodeValue(SET_CodeValue *Struct)
+{
+    switch (Struct->type)
+    {
+        case SET_VALUETYPE_VALUE:
+            if (Struct->value.value != NULL)
+                free(Struct->value.value);
+            break;
+
+        case SET_VALUETYPE_LIST:
+            if (Struct->value.list.list != NULL)
+            {
+                for (SET_CodeValue *List = Struct->value.list.list, *EndList = Struct->value.list.list + Struct->value.list.count; List < EndList; ++List)
+                    SET_DestroyCodeValue(List);
+
+                free(Struct->value.list.list);
+            }
+            break;
+
+        case SET_VALUETYPE_STRUCT:
+            if (Struct->value.sub != NULL)
+            {
+                SET_DestroyCodeStruct(Struct->value.sub);
+                free(Struct->value.sub);
+            }
+            break;
+        
+        default:
+            _SET_SetError(_SET_ERRORID_DESTROYCODEVALUE_KEY, _SET_ERRORMES_VALUEKEY, Struct->type);
+            break;
+    }
 }
 
 #endif
