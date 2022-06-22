@@ -51,14 +51,25 @@ enum _SET_ErrorID {
     _SET_ERRORID_SPLITSTRING_REALLOC = 0x300020207,
     _SET_ERRORID_SPLITSTRING_REALLOC2 = 0x300020208,
     _SET_ERRORID_SPLITSTRING_END = 0x300020209,
-    _SET_ERRORID_SPLITSTRING_ENDSTRUCT = 0x30002020A,
-    _SET_ERRORID_SPLITSTRING_MALLOCERROR = 0x30002020B,
-    _SET_ERRORID_SPLITSTRING_CREATESUBSTRUCT = 0x30002020C,
-    _SET_ERRORID_SPLITSTRING_ENDLIST = 0x30002020D,
-    _SET_ERRORID_SPLITSTRING_CREATELIST = 0x30002020E,
+    _SET_ERRORID_SPLITSTRING_MALLOCERROR = 0x30002020A,
+    _SET_ERRORID_SPLITSTRING_SPLITVALUE = 0x30002020B,
+    _SET_ERRORID_SPLITSTRING_CREATELINEERRROR1 = 0x30002020C,
+    _SET_ERRORID_SPLITSTRING_CREATELINEERRROR2 = 0x30002020D,
+    _SET_ERRORID_SPLITSTRING_CREATELINEERRROR3 = 0x30002020E,
+    _SET_ERRORID_SPLITSTRING_CREATELINEERRROR4 = 0x30002020F,
+    _SET_ERRORID_SPLITSTRING_CREATELINEERRROR5 = 0x300020210,
     _SET_ERRORID_CREATELINEMES_MALLOC = 0x300030200,
     _SET_ERRORID_DESTROYCODEVALUE_KEY = 0x300040100,
-    _SET_ERRORID_DESTROYCODESTRUCT_NULL = 0x300050100
+    _SET_ERRORID_DESTROYCODESTRUCT_NULL = 0x300050100,
+    _SET_ERRORID_SPLITVALUE_ENDSTRUCT = 0x300070200,
+    _SET_ERRORID_SPLITVALUE_CREATESUBSTRUCT = 0x300070201,
+    _SET_ERRORID_SPLITVALUE_ENDLIST = 0x300070202,
+    _SET_ERRORID_SPLITVALUE_CREATELIST = 0x300070203,
+    _SET_ERRORID_SPLITVALUE_CREATELINEERRROR1 = 0x300070204,
+    _SET_ERRORID_SPLITVALUE_CREATELINEERRROR2 = 0x300070205,
+    _SET_ERRORID_SPLITVALUE_CREATELINEERRROR3 = 0x300070205,
+    _SET_ERRORID_SPLITVALUE_CREATELINEERRROR4 = 0x300070206,
+    _SET_ERRORID_SPLITLIST_MALLOCSTRUCT = 0x300080200
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -76,6 +87,8 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_SUBSTRUCT "Unable to split substruct"
 #define _SET_ERRORMES_ENDLIST "Expected ] to end list definition (%s)"
 #define _SET_ERRORMES_SUBLIST "Unable to split list"
+#define _SET_ERRORMES_SPLITVALUE "Unable to split value"
+#define _SET_ERRORMES_CREATELINEERROR "Unable to create line error string"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -164,18 +177,16 @@ uint32_t _SET_SpecialCharLength = 28;
 char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<', '>', '!', '~', '|', '&', '\\', '$', '#', '@', '.', ',', '(', ')', '[', ']', '{', '}'};
 
 #define _SET_LINEPREMES "Line "
-#define _SET_LINEPRELEN 5
 #define _SET_LINEADDMES " -> "
-#define _SET_LINEADDLEN 4
 
 // Removes newlines, tabs and leading/trailing spaces
 char *_SET_CleanString(char *String);
 
 // Creates a line message
-char *_SET_CreateLineMes(char *PreMes, uint32_t Line);
+char *_SET_CreateLineMes(char *PreMes, char *Mes, uint32_t Line, char *EndMes);
 
 // Splits a value up if needed
-bool *_SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line);
+bool _SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line);
 
 // Splits a list into int's components
 SET_CodeList *_SET_SplitList(char *String, char *ErrorLine);
@@ -340,10 +351,10 @@ char *_SET_CleanString(char *String)
     return NewString;
 }
 
-char *_SET_CreateLineMes(char *PreMes, uint32_t Line)
+char *_SET_CreateLineMes(char *PreMes, char *Mes, uint32_t Line, char *EndMes)
 {
     // Find length
-    size_t Length = _SET_LINEPRELEN + strlen(PreMes) + 1;
+    size_t Length = strlen(PreMes) + strlen(Mes) + strlen(EndMes) + 1;
     uint32_t CountLine = Line;
 
     while (CountLine != 0)
@@ -353,18 +364,18 @@ char *_SET_CreateLineMes(char *PreMes, uint32_t Line)
     }
 
     // Allocate memory
-    char *Mes = (char *)malloc(sizeof(char) * Length);
+    char *UseMes = (char *)malloc(sizeof(char) * Length);
 
-    if (Mes == NULL)
+    if (UseMes == NULL)
     {
         _SET_AddErrorForeign(_SET_ERRORID_CREATELINEMES_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(char) * Length);
         return NULL;
     }
 
     // Write message
-    sprintf(Mes, "%s" _SET_LINEPREMES "%u", PreMes, Line);
+    sprintf(UseMes, "%s%s%u%s", PreMes, Mes, Line, EndMes);
 
-    return Mes;
+    return UseMes;
 }
 
 SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
@@ -426,11 +437,16 @@ SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
             // Make sure it ends
             if (*(Current + WithSpecial + 2) != '\'')
             {
-                char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                char *LineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, CodeStruct->count + 1, "");
                 SET_DestroyCodeStruct(CodeStruct);
                 free(CodeStruct);
-                _SET_SetError(_SET_ERRORID_SPLITSTRING_NOSTOPCHAR, _SET_ERRORMES_NOSTOPCHAR, LineMes);
-                free(LineMes);
+                if (LineMes == NULL)
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_CREATELINEERRROR1, _SET_ERRORMES_CREATELINEERROR);
+                else
+                {
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_NOSTOPCHAR, _SET_ERRORMES_NOSTOPCHAR, LineMes);
+                    free(LineMes);
+                }
                 return NULL;
             }
 
@@ -461,21 +477,31 @@ SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
                 // if there is an error
                 if (AfterEqual)
                 {
-                    char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                    char *LineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, CodeStruct->count + 1, "");
                     SET_DestroyCodeStruct(CodeStruct);
                     free(CodeStruct);
-                    _SET_SetError(_SET_ERRORID_SPLITSTRING_SPACEINVALUE, _SET_ERRORMES_SPACEINVALUE, LineMes);
-                    free(LineMes);
+                    if (LineMes == NULL)
+                        _SET_SetError(_SET_ERRORID_SPLITSTRING_CREATELINEERRROR2, _SET_ERRORMES_CREATELINEERROR);
+                    else
+                    {
+                        _SET_SetError(_SET_ERRORID_SPLITSTRING_SPACEINVALUE, _SET_ERRORMES_SPACEINVALUE, LineMes);
+                        free(LineMes);
+                    }
                     return NULL;
                 }
 
                 if (FoundType)
                 {
-                    char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                    char *LineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, CodeStruct->count + 1, "");
                     SET_DestroyCodeStruct(CodeStruct);
                     free(CodeStruct);
-                    _SET_SetError(_SET_ERRORID_SPLITSTRING_TYPETWICE, _SET_ERRORMES_TYPETWICE, LineMes);
-                    free(LineMes);
+                    if (LineMes == NULL)
+                        _SET_SetError(_SET_ERRORID_SPLITSTRING_CREATELINEERRROR3, _SET_ERRORMES_CREATELINEERROR);
+                    else
+                    {
+                        _SET_SetError(_SET_ERRORID_SPLITSTRING_TYPETWICE, _SET_ERRORMES_TYPETWICE, LineMes);
+                        free(LineMes);
+                    }
                     return NULL;
                 }
 
@@ -493,11 +519,16 @@ SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
                 // If there is an error
                 if (AfterEqual)
                 {
-                    char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                    char *LineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, CodeStruct->count + 1, "");
                     SET_DestroyCodeStruct(CodeStruct);
                     free(CodeStruct);
-                    _SET_SetError(_SET_ERRORID_SPLITSTRING_VALUETWICE, _SET_ERRORMES_VALUETWICE, LineMes);
-                    free(LineMes);
+                    if (LineMes == NULL)
+                        _SET_SetError(_SET_ERRORID_SPLITSTRING_CREATELINEERRROR4, _SET_ERRORMES_CREATELINEERROR);
+                    else
+                    {
+                        _SET_SetError(_SET_ERRORID_SPLITSTRING_VALUETWICE, _SET_ERRORMES_VALUETWICE, LineMes);
+                        free(LineMes);
+                    }
                     return NULL;
                 }
 
@@ -515,11 +546,16 @@ SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
                 // If there is an error
                 if (!AfterEqual)
                 {
-                    char *LineMes = _SET_CreateLineMes(ErrorLine, CodeStruct->count + 1);
+                    char *LineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, CodeStruct->count + 1, "");
                     SET_DestroyCodeStruct(CodeStruct);
                     free(CodeStruct);
-                    _SET_SetError(_SET_ERRORID_SPLITSTRING_NOVALUE, _SET_ERRORMES_NOVALUE, LineMes);
-                    free(LineMes);
+                    if (LineMes == NULL)
+                        _SET_SetError(_SET_ERRORID_SPLITSTRING_CREATELINEERRROR5, _SET_ERRORMES_CREATELINEERROR);
+                    else
+                    {
+                        _SET_SetError(_SET_ERRORID_SPLITSTRING_NOVALUE, _SET_ERRORMES_NOVALUE, LineMes);
+                        free(LineMes);
+                    }
                     return NULL;
                 }
 
@@ -575,31 +611,22 @@ SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine)
         return NULL;
     }
 
-    // Create new error line
-    size_t ErrorLength = strlen(ErrorLine) + _SET_LINEADDLEN + 1;
-    char *NewErrorLine = (char *)malloc(sizeof(char) * ErrorLength);
-
-    if (NewErrorLine == NULL)
-    {
-        SET_DestroyCodeStruct(CodeStruct);
-        free(CodeStruct);
-        _SET_SetError(_SET_ERRORID_SPLITSTRING_MALLOCERROR, _SET_ERRORMES_MALLOC, sizeof(SET_CodeValue) * ErrorLength);
-        return NULL;
-    }
-
-    sprintf(NewErrorLine, "%s" _SET_LINEADDMES, ErrorLine);
-
     // Convert values into structs and lists
     for (SET_CodeValue *List = CodeStruct->values, *EndList = CodeStruct->values + CodeStruct->count; List < EndList; ++List)
-    {
-        
-    }
+        // Split the value
+        if (!_SET_SplitValue(List, ErrorLine, (uint32_t)(List - CodeStruct->values)))
+        {
+            SET_DestroyCodeStruct(CodeStruct);
+            free(CodeStruct);
+            _SET_AddError(_SET_ERRORID_SPLITSTRING_SPLITVALUE, _SET_ERRORMES_SPLITVALUE);
+            return NULL;
+        }
 
     // Return the struct
     return CodeStruct;
 }
 
-bool *_SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line)
+bool _SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line)
 {
     // Check for a structs
     if (*Value->value.value == '{')
@@ -609,19 +636,33 @@ bool *_SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line)
 
         if (Value->value.value[Length - 1] != '}')
         {
-            char *LineMes = _SET_CreateLineMes(ErrorLine, Line);
-            _SET_SetError(_SET_ERRORID_SPLITSTRING_ENDSTRUCT, _SET_ERRORMES_ENDSTRUCT, LineMes);
-            free(LineMes);
+            char *LineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, Line, "");
+            if (LineMes == NULL)
+                _SET_SetError(_SET_ERRORID_SPLITVALUE_CREATELINEERRROR3, _SET_ERRORMES_CREATELINEERROR);
+            else
+            {
+                _SET_SetError(_SET_ERRORID_SPLITVALUE_ENDSTRUCT, _SET_ERRORMES_ENDSTRUCT, LineMes);
+                free(LineMes);
+            }
+            return false;
+        }
+
+        // Create new line message
+        char *NewLineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, Line, _SET_LINEADDMES);
+
+        if (NewLineMes == NULL)
+        {
+            _SET_AddError(_SET_ERRORID_SPLITVALUE_CREATELINEERRROR1, _SET_ERRORMES_CREATELINEERROR);
             return false;
         }
 
         // Split the struct
         Value->value.value[Length - 1] = '\0';
-        SET_CodeStruct *StructValue = _SET_SplitString(Value->value.value + 1, ErrorLine);
+        SET_CodeStruct *StructValue = _SET_SplitString(Value->value.value + 1, NewLineMes);
 
         if (StructValue == NULL)
         {
-            _SET_AddError(_SET_ERRORID_SPLITSTRING_CREATESUBSTRUCT, _SET_ERRORMES_SUBSTRUCT);
+            _SET_AddError(_SET_ERRORID_SPLITVALUE_CREATESUBSTRUCT, _SET_ERRORMES_SUBSTRUCT);
             return false;
         }
 
@@ -638,19 +679,33 @@ bool *_SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line)
 
         if (Value->value.value[Length - 1] != ']')
         {
-            char *LineMes = _SET_CreateLineMes(ErrorLine, Line);
-            _SET_SetError(_SET_ERRORID_SPLITSTRING_ENDLIST, _SET_ERRORMES_ENDLIST, LineMes);
-            free(LineMes);
+            char *LineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, Line, "");
+            if (LineMes == NULL)
+                _SET_SetError(_SET_ERRORID_SPLITVALUE_CREATELINEERRROR4, _SET_ERRORMES_CREATELINEERROR);
+            else
+            {
+                _SET_SetError(_SET_ERRORID_SPLITVALUE_ENDLIST, _SET_ERRORMES_ENDLIST, LineMes);
+                free(LineMes);
+            }
+            return false;
+        }
+
+        // Create new line message
+        char *NewLineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, Line, _SET_LINEADDMES);
+
+        if (NewLineMes == NULL)
+        {
+            _SET_AddError(_SET_ERRORID_SPLITVALUE_CREATELINEERRROR2, _SET_ERRORMES_CREATELINEERROR);
             return false;
         }
 
         // Split the list
         Value->value.value[Length - 1] = '\0';
-        SET_CodeList *ListValues = _SET_SplitList(Value->value.value + 1, ErrorLine);
+        SET_CodeList *ListValues = _SET_SplitList(Value->value.value + 1, NewLineMes);
 
         if (ListValues == NULL)
         {
-            _SET_AddError(_SET_ERRORID_SPLITSTRING_CREATELIST, _SET_ERRORMES_SUBLIST);
+            _SET_AddError(_SET_ERRORID_SPLITVALUE_CREATELIST, _SET_ERRORMES_SUBLIST);
             return false;
         }
 
@@ -662,32 +717,126 @@ bool *_SET_SplitValue(SET_CodeValue *Value, char *ErrorLine, uint32_t Line)
     return true;
 }
 
-void SET_InitStructCodeStruct(SET_CodeStruct *Struct)
+SET_CodeList *_SET_SplitList(char *String, char *ErrorLine)
+{
+    // Get memory for the struct
+    SET_CodeList *CodeList = (SET_CodeList *)malloc(sizeof(SET_CodeList));
+
+    if (CodeList == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_SPLITLIST_MALLOCSTRUCT, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_CodeList));
+        return NULL;
+    }
+
+    SET_InitStructCodeList(CodeList);
+
+    char *LastStart = String;
+    int32_t ListCount = 0;
+    int32_t StructCount = 0;
+    bool InString = false;
+    bool FoundType = false;
+    bool AfterEqual = false;
+
+    for (char *Current = String; *Current != '\0'; ++Current)
+    {
+        // Start or end a string
+        if (*Current == '\"')
+            InString = !InString;
+
+        if (InString)
+        {
+            // Do special character
+            if (*Current == '\\' && *(Current + 1) != '\0')
+                ++Current;
+
+            continue;
+        }
+
+        // Skip a char
+        if (*Current == '\'')
+        {
+            uint32_t WithSpecial = 0;
+
+            // With special character
+            if (*(Current + 1) == '\\')
+                WithSpecial = 1;
+
+            // Test if it stops
+            if (*(Current + WithSpecial + 1) == '\0')
+            {
+                SET_DestroyCodeStruct(CodeStruct);
+                free(CodeStruct);
+                _SET_SetError(_SET_ERRORID_SPLITSTRING_STOPCHAR, _SET_ERRORMES_EARLYSTOPCHAR);
+                return NULL;
+            }
+
+            // Make sure it ends
+            if (*(Current + WithSpecial + 2) != '\'')
+            {
+                char *LineMes = _SET_CreateLineMes(ErrorLine, _SET_LINEPREMES, CodeStruct->count + 1, "");
+                SET_DestroyCodeStruct(CodeStruct);
+                free(CodeStruct);
+                if (LineMes == NULL)
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_CREATELINEERRROR1, _SET_ERRORMES_CREATELINEERROR);
+                else
+                {
+                    _SET_SetError(_SET_ERRORID_SPLITSTRING_NOSTOPCHAR, _SET_ERRORMES_NOSTOPCHAR, LineMes);
+                    free(LineMes);
+                }
+                return NULL;
+            }
+
+            // Skip till the end
+            Current += 2 + WithSpecial;
+            continue;
+        }
+
+        // Start or end list and structs
+        if (*Current == '[')
+            ++ListCount;
+
+        else if (*Current == ']')
+            --ListCount;
+
+        else if (*Current == '{')
+            ++StructCount;
+
+        else if (*Current == '}')
+            --StructCount;
+
+        // Do the rest
+        else if (ListCount == 0 && StructCount == 0)
+        {
+        }
+    }
+}
+
+void SET_InitStructCodeStruct(SET_CodeStruct * Struct)
 {
     Struct->names = NULL;
     Struct->values = NULL;
     Struct->count = 0;
 }
 
-void SET_InitStructCodeName(SET_CodeName *Struct)
+void SET_InitStructCodeName(SET_CodeName * Struct)
 {
     Struct->name = NULL;
     Struct->type = NULL;
 }
 
-void SET_InitStructCodeValue(SET_CodeValue *Struct)
+void SET_InitStructCodeValue(SET_CodeValue * Struct)
 {
     Struct->type = SET_VALUETYPE_VALUE;
     Struct->value.value = NULL;
 }
 
-void SET_InitStructCodeList(SET_CodeList *Struct)
+void SET_InitStructCodeList(SET_CodeList * Struct)
 {
     Struct->list = NULL;
     Struct->count = 0;
 }
 
-void SET_DestroyCodeStruct(SET_CodeStruct *Struct)
+void SET_DestroyCodeStruct(SET_CodeStruct * Struct)
 {
     if (Struct->count == 0)
         return;
@@ -699,47 +848,47 @@ void SET_DestroyCodeStruct(SET_CodeStruct *Struct)
     }
 
     // Go through all of the elements
-    for (SET_CodeStruct *List = Struct->values, *EndList = Struct->values + Struct->count; List < EndList; ++List)
+    for (SET_CodeValue *List = Struct->values, *EndList = Struct->values + Struct->count; List < EndList; ++List)
         SET_DestroyCodeValue(List);
 
     free(Struct->names);
     free(Struct->values);
 }
 
-void SET_DestroyCodeValue(SET_CodeValue *Struct)
-{
-    switch (Struct->type)
-    {
-        case SET_VALUETYPE_VALUE:
-            break;
-
-        case SET_VALUETYPE_LIST:
-            if (Struct->value.list != NULL)
+void SET_DestroyCodeValue(SET_CodeValue * Struct)
+        {
+            switch (Struct->type)
             {
-                if (Struct->value.list->list != NULL)
+            case SET_VALUETYPE_VALUE:
+                break;
+
+            case SET_VALUETYPE_LIST:
+                if (Struct->value.list != NULL)
                 {
-                    for (SET_CodeValue *List = Struct->value.list->list, *EndList = Struct->value.list->list + Struct->value.list->count; List < EndList; ++List)
-                        SET_DestroyCodeValue(List);
+                    if (Struct->value.list->list != NULL)
+                    {
+                        for (SET_CodeValue *List = Struct->value.list->list, *EndList = Struct->value.list->list + Struct->value.list->count; List < EndList; ++List)
+                            SET_DestroyCodeValue(List);
 
-                    free(Struct->value.list->list);
+                        free(Struct->value.list->list);
+                    }
+
+                    free(Struct->value.list);
                 }
+                break;
 
-                free(Struct->value.list);
-            }
-            break;
+            case SET_VALUETYPE_STRUCT:
+                if (Struct->value.sub != NULL)
+                {
+                    SET_DestroyCodeStruct(Struct->value.sub);
+                    free(Struct->value.sub);
+                }
+                break;
 
-        case SET_VALUETYPE_STRUCT:
-            if (Struct->value.sub != NULL)
-            {
-                SET_DestroyCodeStruct(Struct->value.sub);
-                free(Struct->value.sub);
+            default:
+                _SET_SetError(_SET_ERRORID_DESTROYCODEVALUE_KEY, _SET_ERRORMES_VALUEKEY, Struct->type);
+                break;
             }
-            break;
-        
-        default:
-            _SET_SetError(_SET_ERRORID_DESTROYCODEVALUE_KEY, _SET_ERRORMES_VALUEKEY, Struct->type);
-            break;
-    }
-}
+        }
 
 #endif
