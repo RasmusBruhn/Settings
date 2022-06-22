@@ -27,18 +27,34 @@ int main(int argc, char **argv)
     }
 
     printf("Original string: %s\n\nCleaned String: %s\n\n\n", Settings, CleanString);
+    printf("%u\n", CleanString[22]);
+    SET_CodeStruct *SplitString = _SET_SplitString(CleanString, "");
+
+    if (SplitString == NULL)
+    {
+        free(Settings);
+        free(CleanString);
+        printf("Unable to split string: %s\n", SET_GetError());
+        return 0;
+    }
+
+    PrintCodeStruct(SplitString);
 
     free(Settings);
     free(CleanString);
+    SET_DestroyCodeStruct(SplitString);
+    free(SplitString);
+
+    printf("Finished with no errors\n");
 
     return 0;
 }
 
 void PrintCodeStruct(SET_CodeStruct *Struct)
 {
-    for (uint32_t Pos = 0; Pos < Struct->count - 1; ++Pos)
+    for (uint32_t Pos = 0; Pos < Struct->count; ++Pos)
     {
-        printf("Type: \"%s\", Name: \"%s\", Value:", Struct->names[Pos].type, Struct->names[Pos].name);
+        printf("Type: \"%s\", Pointer: %u, Name: \"%s\", Value:", Struct->names[Pos].type, Struct->names[Pos].pointer, Struct->names[Pos].name);
         PrintCodeValue(Struct->values + Pos);
         printf("\n");
     }

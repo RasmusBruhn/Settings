@@ -4,6 +4,7 @@ Option1 = 1;Option2= 9.5; // Comment 1
   Comment next line */
     Option4 ="Test";
 Option5 = {
-    Sub1 = "First";
+    Sub1 = [1, 2, 3.];
     double Sub2 = 5;
+    int *Sub3 = [1, 2, 3];
 };
