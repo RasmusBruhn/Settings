@@ -10,33 +10,6 @@
 #define ERR_PREFIX SET
 #include <Error.h>
 
-enum __SET_Type {
-    SET_TYPE_U8,
-    SET_TYPE_U16,
-    SET_TYPE_U32,
-    SET_TYPE_U64,
-    SET_TYPE_AU8,
-    SET_TYPE_AU16,
-    SET_TYPE_AU32,
-    SET_TYPE_AU64,
-    SET_TYPE_I8,
-    SET_TYPE_I16,
-    SET_TYPE_I32,
-    SET_TYPE_I64,
-    SET_TYPE_AI8,
-    SET_TYPE_AI16,
-    SET_TYPE_AI32,
-    SET_TYPE_AI64,
-    SET_TYPE_F,
-    SET_TYPE_D,
-    SET_TYPE_AF,
-    SET_TYPE_AD,
-    SET_TYPE_C,
-    SET_TYPE_AC,
-    SET_TYPE_S,
-    SET_TYPE_AS
-};
-
 enum _SET_ErrorID {
     _SET_ERRORID_NONE = 0x300000000,
     _SET_ERRORID_CLEANSTRING_MALLOC = 0x300010200,
@@ -110,9 +83,25 @@ enum __SET_ValueType {
     SET_VALUETYPE_STRUCT
 };
 
+enum __SET_DataType {
+    SET_DATATYPE_U8,
+    SET_DATATYPE_U16,
+    SET_DATATYPE_U32,
+    SET_DATATYPE_U64,
+    SET_DATATYPE_I8,
+    SET_DATATYPE_I16,
+    SET_DATATYPE_I32,
+    SET_DATATYPE_I64,
+    SET_DATATYPE_F,
+    SET_DATATYPE_D,
+    SET_DATATYPE_C,
+    SET_DATATYPE_S,
+    SET_DATATYPE_STRUCT
+};
+
+typedef struct __SET_Data SET_Data;
 typedef struct __SET_Setting SET_Setting;
-typedef union __SET_Data SET_Data;
-typedef enum __SET_Type SET_Type;
+typedef enum __SET_DataType SET_DataType;
 typedef enum __SET_ValueType SET_ValueType;
 typedef struct __SET_CodeName SET_CodeName;
 typedef struct __SET_CodeValue SET_CodeValue;
@@ -120,37 +109,9 @@ typedef union ___SET_CodeValue _SET_CodeValue;
 typedef struct __SET_CodeStruct SET_CodeStruct;
 typedef struct __SET_CodeList SET_CodeList;
 
-// The information for one field
-union __SET_Data {
-    uint8_t u8;
-    uint16_t u16;
-    uint32_t u32;
-    uint64_t u64;
-    uint8_t *au8;
-    uint16_t *au16;
-    uint32_t *au32;
-    uint64_t *au64;
-    int8_t i8;
-    int16_t i16;
-    int32_t i32;
-    int64_t i64;
-    int8_t *ai8;
-    int16_t *ai16;
-    int32_t *ai32;
-    int64_t *ai64;
-    float f;
-    double d;
-    float *af;
-    double *ad;
-    char c;
-    char *ac;
-    char *s;
-    char **as;
-};
-
-struct __SET_Field {
-    SET_Data data;
-    SET_Type type;
+struct __SET_Data {
+    void *data;
+    SET_DataType type;
 };
 
 // Saves all information about a setting
@@ -209,6 +170,9 @@ SET_CodeList *_SET_SplitList(char *String, char *ErrorLine);
 
 // Split string into field names and values
 SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine);
+
+// Converts a code struct into a dictionary
+
 
 // Initialize structs
 void SET_InitStructCodeStruct(SET_CodeStruct *Struct);
