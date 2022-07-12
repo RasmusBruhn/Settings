@@ -55,7 +55,15 @@ enum _SET_ErrorID {
     _SET_ERRORID_SPLITLIST_REALLOCLIST = 0x300090204,
     _SET_ERRORID_SPLITLIST_SPLITVALUE = 0x300090205,
     _SET_ERRORID_SPLITLIST_CREATELINEERRROR2 = 0x300090206,
-    _SET_ERRORID_SPLITLIST_CREATELINEERRROR3 = 0x300090207
+    _SET_ERRORID_SPLITLIST_CREATELINEERRROR3 = 0x300090207,
+    _SET_ERRORID_GETPOSSIBLETYPE_NOVALUE = 0x3000A0100,
+    _SET_ERRORID_GETPOSSIBLETYPE_CHAREND = 0x3000A0101,
+    _SET_ERRORID_GETPOSSIBLETYPE_STRINGEND = 0x3000A0102,
+    _SET_ERRORID_GETPOSSIBLETYPE_CHARLENGTH = 0x3000A0103,
+    _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALBIN = 0x3000A0104,
+    _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALHEX = 0x3000A0105,
+    _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALDOT = 0x3000A0106,
+    _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALNUM = 0x3000A0107
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -76,6 +84,13 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_SPLITVALUE "Unable to split value"
 #define _SET_ERRORMES_CREATELINEERROR "Unable to create line error string"
 #define _SET_ERRORMES_ENDSTRING "File ended unexpectedly inside a string definition (%s)"
+#define _SET_ERRORMES_NOSTRING "Found no string"
+#define _SET_ERRORMES_NOENDCHAR "Char value ended without \' (%s)"
+#define _SET_ERRORMES_NOENDSTRING "String value ended without \" (%s)"
+#define _SET_ERRORMES_ILLIGALBIN "Found illigal char in definition of binary number, must be 0 or 1 (%s: %c)"
+#define _SET_ERRORMES_ILLIGALHEX "Found illigal char in definition of hexadecimal number, must be 0-9, a-f or A-F (%s: %c)"
+#define _SET_ERRORMES_ILLIGALNUM "Found illigal char in definition of number, must be 0-9 (%s: %c)"
+#define _SET_ERRORMES_ILLIGALDOT "Found two dots in definition of floating point number (%s)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -99,10 +114,20 @@ enum __SET_DataType {
     SET_DATATYPE_STRUCT
 };
 
+enum __SET_DataTypeBase {
+    SET_DATATYPEBASE_NONE = 0x00,
+    SET_DATATYPEBASE_INT = 0x01,
+    SET_DATATYPEBASE_UINT = 0x02,
+    SET_DATATYPEBASE_FLOAT = 0x04,
+    SET_DATATYPEBASE_CHAR = 0x08,
+    SET_DATATYPEBASE_STRING = 0x10
+};
+
 typedef struct __SET_Data SET_Data;
 typedef struct __SET_Setting SET_Setting;
 typedef enum __SET_DataType SET_DataType;
 typedef enum __SET_ValueType SET_ValueType;
+typedef enum __SET_DataTypeBase SET_DataTypeBase;
 typedef struct __SET_CodeName SET_CodeName;
 typedef struct __SET_CodeValue SET_CodeValue;
 typedef union ___SET_CodeValue _SET_CodeValue;
@@ -171,8 +196,8 @@ SET_CodeList *_SET_SplitList(char *String, char *ErrorLine);
 // Split string into field names and values
 SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine);
 
-// Converts a code struct into a dictionary
-
+// Finds all the possible types for the value
+SET_DataTypeBase _SET_GetPossibleType(char *Value);
 
 // Initialize structs
 void SET_InitStructCodeStruct(SET_CodeStruct *Struct);
@@ -915,6 +940,167 @@ SET_CodeList *_SET_SplitList(char *String, char *ErrorLine)
 
     // Return the struct
     return CodeList;
+}
+
+SET_DataTypeBase _SET_GetPossibleType(char *Value)
+{
+    // Make sure there is a string
+    if (*Value == '\0')
+    {
+        _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_NOVALUE, _SET_ERRORMES_NOSTRING);
+        return SET_DATATYPEBASE_NONE;
+    }
+
+    char *Current = Value;
+    SET_DataTypeBase Type = SET_DATATYPEBASE_NONE;
+    bool Hex = false;
+    bool Bin = false;
+    bool Dot = false;
+
+    // Do the start
+    switch (*Current)
+    {
+        // Char
+        case ('\''):
+            Type = SET_DATATYPEBASE_CHAR;
+            break;
+
+        // String
+        case ('\"'):
+            Type = SET_DATATYPEBASE_STRING;
+            break;
+
+        // Signed
+        case ('-'):
+            Type = SET_DATATYPEBASE_INT | SET_DATATYPEBASE_FLOAT;
+            break;
+
+        // Hex or Bin
+        case ('0'):
+            ++Current;
+            switch (*Current)
+            {
+                // Hex
+                case ('x'):
+                    Type = SET_DATATYPEBASE_UINT;
+                    Hex = true;
+                    break;
+
+                // Bin
+                case ('b'):
+                    Type = SET_DATATYPEBASE_UINT;
+                    Bin = true;
+                    break;
+                
+                default:
+                    Type = SET_DATATYPEBASE_INT | SET_DATATYPEBASE_UINT | SET_DATATYPEBASE_FLOAT;
+                    Current -= 2;
+                    break;
+            }
+            break;
+        
+        default:
+            Type = SET_DATATYPEBASE_INT | SET_DATATYPEBASE_UINT | SET_DATATYPEBASE_FLOAT;
+            --Current;
+            break;
+    }
+
+    ++Current;
+
+    // Go through entire string
+    if (Type != SET_DATATYPEBASE_CHAR && Type != SET_DATATYPEBASE_STRING)
+        for (; *Current != '\0'; ++Current)
+        {
+            // Check binary
+            if (Bin)
+            {
+                if (*Current != '0' || *Current != '1')
+                {
+                    _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_ILLIGALBIN, _SET_ERRORMES_ILLIGALBIN, Value, *Current);
+                    return SET_DATATYPEBASE_NONE;
+                }
+            }
+
+            else if (Hex)
+            {
+                if (!((*Current >= '0' && *Current <= '9') || (*Current >= 'a' && *Current <= 'f') || (*Current >= 'A' && *Current <= 'F')))
+                {
+                    _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_ILLIGALHEX, _SET_ERRORMES_ILLIGALHEX, Value, *Current);
+                    return SET_DATATYPEBASE_NONE;
+                }
+            }
+
+            else
+            {
+                if (*Current == '.' && Type & SET_DATATYPEBASE_FLOAT)
+                {
+                    if (!Dot)
+                    {
+                        Dot = true;
+                        Type = SET_DATATYPEBASE_FLOAT;
+                    }
+
+                    else
+                    {
+                        _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_ILLIGALDOT, _SET_ERRORMES_ILLIGALDOT, Value);
+                        return SET_DATATYPEBASE_NONE;
+                    }
+                }
+
+                else if (!(*Current >= '0' && *Current <= '9'))
+                {
+                    _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_ILLIGALNUM, _SET_ERRORMES_ILLIGALNUM, Value, *Current);
+                    return SET_DATATYPEBASE_NONE;
+                }
+            }
+        }
+
+    // Do the end
+    else
+    {
+        Current += strlen(Current) - 1;
+
+        if (Type == SET_DATATYPEBASE_CHAR)
+        {
+            // Make sure a char ends
+            if (*Current != '\'')
+            {
+                _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_CHAREND, _SET_ERRORMES_NOENDCHAR, Value);
+                return SET_DATATYPEBASE_NONE;
+            }
+
+            // Make sure it is not too long or short
+            uint32_t CharLength = 3;
+
+            if (*(Value + 1) == '\\')
+                ++CharLength;
+
+            if (strlen(Value) != CharLength)
+            {
+                _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_CHARLENGTH, _SET_ERRORMES_NOSTOPCHAR, Value);
+                return SET_DATATYPEBASE_NONE;
+            }
+        }
+
+        // Make sure a tring ends
+        else if (Type == SET_DATATYPEBASE_STRING)
+        {
+            // Check if it really ends
+            uint32_t SpecialCount = 0;
+
+            for (char *Current2 = Current - 1; *Current2 == '\\'; --Current2)
+                ++SpecialCount;
+
+            // Check that it ends
+            if (SpecialCount % 2 == 1 || *Current != '\"')
+            {
+                _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_STRINGEND, _SET_ERRORMES_NOENDSTRING, Value);
+                return SET_DATATYPEBASE_NONE;
+            }
+        }
+    } 
+
+    return Type;
 }
 
 void SET_InitStructCodeStruct(SET_CodeStruct * Struct)
