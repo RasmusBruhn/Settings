@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <Dictionary.h>
 
 #define ERR_PREFIX SET
 #include <Error.h>
@@ -63,7 +64,8 @@ enum _SET_ErrorID {
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALBIN = 0x3000A0104,
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALHEX = 0x3000A0105,
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALDOT = 0x3000A0106,
-    _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALNUM = 0x3000A0107
+    _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALNUM = 0x3000A0107,
+    _SET_ERRORID_STRUCTTODICT_CREATEDICT = 0x3000B0200
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -91,6 +93,7 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_ILLIGALHEX "Found illigal char in definition of hexadecimal number, must be 0-9, a-f or A-F (%s: %c)"
 #define _SET_ERRORMES_ILLIGALNUM "Found illigal char in definition of number, must be 0-9 (%s: %c)"
 #define _SET_ERRORMES_ILLIGALDOT "Found two dots in definition of floating point number (%s)"
+#define _SET_ERRORMES_CREATEDICT "Unable to create a dictionary"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -99,19 +102,20 @@ enum __SET_ValueType {
 };
 
 enum __SET_DataType {
-    SET_DATATYPE_U8,
-    SET_DATATYPE_U16,
-    SET_DATATYPE_U32,
-    SET_DATATYPE_U64,
-    SET_DATATYPE_I8,
-    SET_DATATYPE_I16,
-    SET_DATATYPE_I32,
-    SET_DATATYPE_I64,
-    SET_DATATYPE_F,
-    SET_DATATYPE_D,
-    SET_DATATYPE_C,
-    SET_DATATYPE_S,
-    SET_DATATYPE_STRUCT
+    SET_DATATYPE_UINT8,
+    SET_DATATYPE_UINT16,
+    SET_DATATYPE_UINT32,
+    SET_DATATYPE_UINT64,
+    SET_DATATYPE_INT8,
+    SET_DATATYPE_INT16,
+    SET_DATATYPE_INT32,
+    SET_DATATYPE_INT64,
+    SET_DATATYPE_FLOAT,
+    SET_DATATYPE_DOUBLE,
+    SET_DATATYPE_CHAR,
+    SET_DATATYPE_STR,
+    SET_DATATYPE_STRUCT,
+    SET_DATATYPE_LIST
 };
 
 enum __SET_DataTypeBase {
@@ -123,8 +127,9 @@ enum __SET_DataTypeBase {
     SET_DATATYPEBASE_STRING = 0x10
 };
 
+typedef union ___SET_Data _SET_Data;
 typedef struct __SET_Data SET_Data;
-typedef struct __SET_Setting SET_Setting;
+typedef struct __SET_DataList SET_DataList;
 typedef enum __SET_DataType SET_DataType;
 typedef enum __SET_ValueType SET_ValueType;
 typedef enum __SET_DataTypeBase SET_DataTypeBase;
@@ -134,15 +139,32 @@ typedef union ___SET_CodeValue _SET_CodeValue;
 typedef struct __SET_CodeStruct SET_CodeStruct;
 typedef struct __SET_CodeList SET_CodeList;
 
-struct __SET_Data {
-    void *data;
-    SET_DataType type;
+union ___SET_Data {
+    uint8_t u8;
+    uint16_t u16;
+    uint32_t u32;
+    uint64_t u64;
+    int8_t i8;
+    int16_t i16;
+    int32_t i32;
+    int64_t i64;
+    float f;
+    double d;
+    char ch;
+    char *str;
+    DIC_Dict *stct;
+    SET_DataList list;
 };
 
-// Saves all information about a setting
-struct __SET_Setting {
-    char **key; // Strings of keys for the inputs
-    SET_Data *data; // The data for the keys
+struct __SET_Data {
+    _SET_Data data; // The data value
+    SET_DataType type; // The type of the data
+};
+
+struct __SET_DataList {
+    uint32_t count; // The number of items in the list
+    _SET_Data *list; // The list of values
+    SET_DataType type; // The type of all the values
 };
 
 struct __SET_CodeName {
@@ -197,7 +219,10 @@ SET_CodeList *_SET_SplitList(char *String, char *ErrorLine);
 SET_CodeStruct *_SET_SplitString(char *String, char *ErrorLine);
 
 // Finds all the possible types for the value
-SET_DataTypeBase _SET_GetPossibleType(char *Value);
+SET_DataTypeBase _SET_GetPossibleType(const char *Value);
+
+// Converts a code struct into a dictionary
+DIC_Dict *_SET_StructToDict(const SET_CodeStruct *Struct);
 
 // Initialize structs
 void SET_InitStructCodeStruct(SET_CodeStruct *Struct);
@@ -942,7 +967,7 @@ SET_CodeList *_SET_SplitList(char *String, char *ErrorLine)
     return CodeList;
 }
 
-SET_DataTypeBase _SET_GetPossibleType(char *Value)
+SET_DataTypeBase _SET_GetPossibleType(const char *Value)
 {
     // Make sure there is a string
     if (*Value == '\0')
@@ -951,7 +976,7 @@ SET_DataTypeBase _SET_GetPossibleType(char *Value)
         return SET_DATATYPEBASE_NONE;
     }
 
-    char *Current = Value;
+    const char *Current = Value;
     SET_DataTypeBase Type = SET_DATATYPEBASE_NONE;
     bool Hex = false;
     bool Bin = false;
@@ -1103,33 +1128,83 @@ SET_DataTypeBase _SET_GetPossibleType(char *Value)
     return Type;
 }
 
-void SET_InitStructCodeStruct(SET_CodeStruct * Struct)
+DIC_Dict *_SET_StructToDict(const SET_CodeStruct *Struct)
+{
+    // Create a dictionary
+    DIC_Dict *Dict = DIC_CreateDict(Struct->count);
+
+    if (Dict == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_STRUCTTODICT_CREATEDICT, DIC_GetError(), _SET_ERRORMES_CREATEDICT);
+        return NULL;
+    }
+
+    // Start filling it up
+    SET_CodeName *Names = Struct->names;
+    SET_CodeName *EndNames = Names + Struct->count;
+    SET_CodeValue *Values = Struct->values;
+
+    for (; Names < EndNames; ++Names, ++Values)
+    {
+
+    }
+
+    return Dict;
+}
+
+void SET_InitStructData(SET_Data *Struct)
+{
+    Struct->data.stct = NULL;
+    Struct->type = SET_DATATYPE_STRUCT;
+}
+
+void SET_InitStructDataList(SET_DataList *Struct)
+{
+    Struct->count = 0;
+    Struct->list = NULL;
+    Struct->type = SET_DATATYPE_STRUCT;
+}
+
+void SET_InitStructCodeStruct(SET_CodeStruct *Struct)
 {
     Struct->names = NULL;
     Struct->values = NULL;
     Struct->count = 0;
 }
 
-void SET_InitStructCodeName(SET_CodeName * Struct)
+void SET_InitStructCodeName(SET_CodeName *Struct)
 {
     Struct->name = NULL;
     Struct->type = NULL;
     Struct->pointer = 0;
 }
 
-void SET_InitStructCodeValue(SET_CodeValue * Struct)
+void SET_InitStructCodeValue(SET_CodeValue *Struct)
 {
     Struct->type = SET_VALUETYPE_VALUE;
     Struct->value.value = NULL;
 }
 
-void SET_InitStructCodeList(SET_CodeList * Struct)
+void SET_InitStructCodeList(SET_CodeList *Struct)
 {
     Struct->list = NULL;
     Struct->count = 0;
 }
 
-void SET_DestroyCodeStruct(SET_CodeStruct * Struct)
+void SET_DestroyStructData(SET_Data *Struct)
+{
+    switch ()
+    {
+    case /* constant-expression */:
+        /* code */
+        break;
+    
+    default:
+        break;
+    }
+}
+
+void SET_DestroyCodeStruct(SET_CodeStruct *Struct)
 {
     if (Struct->count == 0)
         return;
@@ -1148,7 +1223,7 @@ void SET_DestroyCodeStruct(SET_CodeStruct * Struct)
     free(Struct->values);
 }
 
-void SET_DestroyCodeValue(SET_CodeValue * Struct)
+void SET_DestroyCodeValue(SET_CodeValue *Struct)
 {
     switch (Struct->type)
     {
