@@ -96,6 +96,7 @@ enum __SET_ValueType {
 
 enum __SET_DataType {
     SET_DATATYPE_NONE,
+    SET_DATATYPE_INT,
     SET_DATATYPE_UINT8,
     SET_DATATYPE_UINT16,
     SET_DATATYPE_UINT32,
@@ -194,6 +195,10 @@ struct __SET_CodeStruct {
 uint32_t _SET_SpecialCharLength = 28;
 char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<', '>', '!', '~', '|', '&', '\\', '$', '#', '@', '.', ',', '(', ')', '[', ']', '{', '}'};
 
+// Types
+char *_SET_TypeNames[] = {"int", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float", "double", "char", "str", "struct"};
+SET_DataType _SET_Types[] = {SET_DATATYPE_INT, SET_DATATYPE_UINT8, SET_DATATYPE_UINT16, SET_DATATYPE_UINT32, SET_DATATYPE_UINT64, SET_DATATYPE_INT8, SET_DATATYPE_INT16, SET_DATATYPE_INT32, SET_DATATYPE_INT64, SET_DATATYPE_FLOAT, SET_DATATYPE_DOUBLE, SET_DATATYPE_CHAR, SET_DATATYPE_STR, SET_DATATYPE_STRUCT};
+
 #define _SET_LINEPREMES "Line"
 #define _SET_ELEMENTPREMES "Element"
 
@@ -221,8 +226,8 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
 // Converts a single value from a string
 SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint32_t Depth);
 
-// Reads the type and fills up pointer if it is a list
-SET_DataType _SET_ReadType(const char *Type, uint32_t *Pointer);
+// Reads the type
+SET_DataType _SET_ReadType(const char *Type);
 
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
@@ -1119,7 +1124,7 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint3
     }
 }
 
-SET_DataType _SET_ReadType(const char *Type, uint32_t *Pointer)
+SET_DataType _SET_ReadType(const char *Type)
 {
 
 }
