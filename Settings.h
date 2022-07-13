@@ -32,6 +32,9 @@ enum _SET_ErrorID {
     _SET_ERRORID_SPLITSTRING_MALLOC2 = 0x30002020E,
     _SET_ERRORID_CREATELINEMES_MALLOC = 0x300030200,
     _SET_ERRORID_DESTROYCODEVALUE_KEY = 0x300040100,
+    _SET_ERRORID_CONVERTVALUE_MALLOC = 0x300050200,
+    _SET_ERRORID_CONVERTVALUE_LIST = 0x300050201,
+    _SET_ERRORID_CONVERTVALUE_STRUCT = 0x300050202,
     _SET_ERRORID_SPLITVALUE_ENDSTRUCT = 0x300070200,
     _SET_ERRORID_SPLITVALUE_CREATESUBSTRUCT = 0x300070201,
     _SET_ERRORID_SPLITVALUE_ENDLIST = 0x300070202,
@@ -82,6 +85,8 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_ILLIGALNUM "Found illigal char in definition of number, must be 0-9 (%s: %c)"
 #define _SET_ERRORMES_ILLIGALDOT "Found two dots in definition of floating point number (%s)"
 #define _SET_ERRORMES_CREATEDICT "Unable to create a dictionary"
+#define _SET_ERRORMES_CONVERTLIST "Unable to convert list"
+#define _SET_ERRORMES_CONVERTSTRUCT "Unable to convert struct"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -90,6 +95,7 @@ enum __SET_ValueType {
 };
 
 enum __SET_DataType {
+    SET_DATATYPE_NONE,
     SET_DATATYPE_UINT8,
     SET_DATATYPE_UINT16,
     SET_DATATYPE_UINT32,
@@ -152,6 +158,8 @@ struct __SET_Data {
 struct __SET_DataList {
     uint32_t count; // The number of items in the list
     SET_Data **list; // The list of values
+    SET_DataType type; // The type of the list
+    uint32_t depth; // The depth of the list
 };
 
 struct __SET_CodeName {
@@ -205,7 +213,16 @@ SET_CodeStruct *_SET_SplitString(char *String);
 SET_DataTypeBase _SET_GetPossibleType(const char *Value);
 
 // Converts a code struct into a dictionary
-DIC_Dict *_SET_StructToDict(const SET_CodeStruct *Struct);
+DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct);
+
+// Converts a list from a string
+SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint32_t Depth);
+
+// Converts a single value from a string
+SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint32_t Depth);
+
+// Reads the type and fills up pointer if it is a list
+SET_DataType _SET_ReadType(const char *Type, uint32_t *Pointer);
 
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
@@ -425,16 +442,16 @@ SET_CodeStruct *_SET_SplitString(char *String)
             // Test if it stops
             if (*(Current + WithSpecial + 1) == '\0')
             {
-                SET_DestroyCodeStruct(CodeStruct);
                 _SET_SetError(_SET_ERRORID_SPLITSTRING_STOPCHAR, _SET_ERRORMES_EARLYSTOPCHAR, _SET_LINEPREMES, CodeStruct->count + 1);
+                SET_DestroyCodeStruct(CodeStruct);
                 return NULL;
             }
 
             // Make sure it ends
             if (*(Current + WithSpecial + 2) != '\'')
             {
-                SET_DestroyCodeStruct(CodeStruct);
                 _SET_SetError(_SET_ERRORID_SPLITSTRING_NOSTOPCHAR, _SET_ERRORMES_NOSTOPCHAR, _SET_LINEPREMES, CodeStruct->count + 1);
+                SET_DestroyCodeStruct(CodeStruct);
                 return NULL;
             }
 
@@ -465,15 +482,15 @@ SET_CodeStruct *_SET_SplitString(char *String)
                 // if there is an error
                 if (AfterEqual)
                 {
-                    SET_DestroyCodeStruct(CodeStruct);
                     _SET_SetError(_SET_ERRORID_SPLITSTRING_SPACEINVALUE, _SET_ERRORMES_SPACEINVALUE, _SET_LINEPREMES, CodeStruct->count + 1);
+                    SET_DestroyCodeStruct(CodeStruct);
                     return NULL;
                 }
 
                 if (FoundType)
                 {
-                    SET_DestroyCodeStruct(CodeStruct);
                     _SET_SetError(_SET_ERRORID_SPLITSTRING_TYPETWICE, _SET_ERRORMES_TYPETWICE, _SET_LINEPREMES, CodeStruct->count + 1);
+                    SET_DestroyCodeStruct(CodeStruct);
                     return NULL;
                 }
 
@@ -504,8 +521,8 @@ SET_CodeStruct *_SET_SplitString(char *String)
                 // If there is an error
                 if (AfterEqual)
                 {
-                    SET_DestroyCodeStruct(CodeStruct);
                     _SET_SetError(_SET_ERRORID_SPLITSTRING_VALUETWICE, _SET_ERRORMES_VALUETWICE, _SET_LINEPREMES, CodeStruct->count + 1);
+                    SET_DestroyCodeStruct(CodeStruct);
                     return NULL;
                 }
 
@@ -523,8 +540,8 @@ SET_CodeStruct *_SET_SplitString(char *String)
                 // If there is an error
                 if (!AfterEqual)
                 {
-                    SET_DestroyCodeStruct(CodeStruct);
                     _SET_SetError(_SET_ERRORID_SPLITSTRING_NOVALUE, _SET_ERRORMES_NOVALUE, _SET_LINEPREMES, CodeStruct->count + 1);
+                    SET_DestroyCodeStruct(CodeStruct);
                     return NULL;
                 }
 
@@ -533,8 +550,8 @@ SET_CodeStruct *_SET_SplitString(char *String)
 
                 if (NewNames == NULL)
                 {
-                    SET_DestroyCodeStruct(CodeStruct);
                     _SET_SetError(_SET_ERRORID_SPLITSTRING_REALLOC, _SET_ERRORMES_REALLOC, sizeof(SET_CodeName *) * (CodeStruct->count + 1));
+                    SET_DestroyCodeStruct(CodeStruct);
                     return NULL;
                 }
 
@@ -544,8 +561,8 @@ SET_CodeStruct *_SET_SplitString(char *String)
 
                 if (CodeStruct->names[CodeStruct->count] == NULL)
                 {
-                    SET_DestroyCodeStruct(CodeStruct);
                     _SET_SetError(_SET_ERRORID_SPLITSTRING_MALLOC, _SET_ERRORMES_MALLOC, sizeof(SET_CodeName));
+                    SET_DestroyCodeStruct(CodeStruct);
                     return NULL;
                 }
 
@@ -555,8 +572,8 @@ SET_CodeStruct *_SET_SplitString(char *String)
 
                 if (NewValues == NULL)
                 {
-                    SET_DestroyCodeStruct(CodeStruct);
                     _SET_SetError(_SET_ERRORID_SPLITSTRING_REALLOC2, _SET_ERRORMES_REALLOC, sizeof(SET_CodeValue *) * (CodeStruct->count + 1));
+                    SET_DestroyCodeStruct(CodeStruct);
                     return NULL;
                 }
 
@@ -566,8 +583,8 @@ SET_CodeStruct *_SET_SplitString(char *String)
 
                 if (CodeStruct->values[CodeStruct->count] == NULL)
                 {
-                    SET_DestroyCodeStruct(CodeStruct);
                     _SET_SetError(_SET_ERRORID_SPLITSTRING_MALLOC2, _SET_ERRORMES_MALLOC, sizeof(SET_CodeValue));
+                    SET_DestroyCodeStruct(CodeStruct);
                     return NULL;
                 }
 
@@ -596,16 +613,16 @@ SET_CodeStruct *_SET_SplitString(char *String)
     // Make sure it is not inside of a string
     if (InString)
     {
-        SET_DestroyCodeStruct(CodeStruct);
         _SET_SetError(_SET_ERRORID_SPLITSTRING_ENDSTRING, _SET_ERRORMES_ENDSTRING, _SET_LINEPREMES, CodeStruct->count + 1);
+        SET_DestroyCodeStruct(CodeStruct);
         return NULL;
     }
 
     // Make sure it ended with a line end
     if (*(Current - 1) != '\0' || FoundType || AfterEqual)
     {
-        SET_DestroyCodeStruct(CodeStruct);
         _SET_SetError(_SET_ERRORID_SPLITSTRING_END, _SET_ERRORMES_WRONGEND);
+        SET_DestroyCodeStruct(CodeStruct);
         return NULL;
     }
 
@@ -614,8 +631,8 @@ SET_CodeStruct *_SET_SplitString(char *String)
         // Split the value
         if (!_SET_SplitValue(*List))
         {
-            SET_DestroyCodeStruct(CodeStruct);
             _SET_AddError(_SET_ERRORID_SPLITSTRING_SPLITVALUE, _SET_ERRORMES_SPLITVALUE, _SET_LINEPREMES, CodeStruct->count + 1);
+            SET_DestroyCodeStruct(CodeStruct);
             return NULL;
         }
 
@@ -709,8 +726,8 @@ SET_CodeList *_SET_SplitList(char *String)
 
     if (CodeList->list == NULL)
     {
-        SET_DestroyCodeList(CodeList);
         _SET_AddErrorForeign(_SET_ERRORID_SPLITLIST_MALLOCLIST, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_CodeValue *));
+        SET_DestroyCodeList(CodeList);
         return NULL;
     }
 
@@ -718,8 +735,8 @@ SET_CodeList *_SET_SplitList(char *String)
 
     if (*CodeList->list == NULL)
     {
-        SET_DestroyCodeList(CodeList);
         _SET_AddErrorForeign(_SET_ERRORID_SPLITLIST_MALLOCLIST2, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_CodeValue));
+        SET_DestroyCodeList(CodeList);
         return NULL;
     }
 
@@ -757,16 +774,16 @@ SET_CodeList *_SET_SplitList(char *String)
             // Test if it stops
             if (*(Current + WithSpecial + 1) == '\0')
             {
-                SET_DestroyCodeList(CodeList);
                 _SET_SetError(_SET_ERRORID_SPLITLIST_STOPCHAR, _SET_ERRORMES_EARLYSTOPCHAR, _SET_ELEMENTPREMES, CodeList->count + 1);
+                SET_DestroyCodeList(CodeList);
                 return NULL;
             }
 
             // Make sure it ends
             if (*(Current + WithSpecial + 2) != '\'')
             {
-                SET_DestroyCodeList(CodeList);
                 _SET_SetError(_SET_ERRORID_SPLITLIST_NOSTOPCHAR, _SET_ERRORMES_NOSTOPCHAR, _SET_ELEMENTPREMES, CodeList->count + 1);
+                SET_DestroyCodeList(CodeList);
                 return NULL;
             }
 
@@ -796,8 +813,8 @@ SET_CodeList *_SET_SplitList(char *String)
 
             if (NewList == NULL)
             {
-                SET_DestroyCodeList(CodeList);
                 _SET_SetError(_SET_ERRORID_SPLITLIST_REALLOCLIST, _SET_ERRORMES_REALLOC, sizeof(SET_CodeValue *) * (CodeList->count + 2));
+                SET_DestroyCodeList(CodeList);
                 return NULL;
             }
 
@@ -807,8 +824,8 @@ SET_CodeList *_SET_SplitList(char *String)
 
             if (CodeList->list[CodeList->count + 1] == NULL)
             {
-                SET_DestroyCodeList(CodeList);
                 _SET_SetError(_SET_ERRORID_SPLITLIST_REALLOCLIST2, _SET_ERRORMES_MALLOC, sizeof(SET_CodeValue));
+                SET_DestroyCodeList(CodeList);
                 return NULL;
             }
 
@@ -826,8 +843,8 @@ SET_CodeList *_SET_SplitList(char *String)
     // Make sure it is not inside of a string
     if (InString)
     {
-        SET_DestroyCodeList(CodeList);
         _SET_SetError(_SET_ERRORID_SPLITSTRING_ENDSTRING, _SET_ERRORMES_ENDSTRING, _SET_ELEMENTPREMES, CodeList->count + 1);
+        SET_DestroyCodeList(CodeList);
         return NULL;
     }
 
@@ -840,8 +857,8 @@ SET_CodeList *_SET_SplitList(char *String)
         // Split the value
         if (!_SET_SplitValue(*List))
         {
-            SET_DestroyCodeList(CodeList);
             _SET_AddError(_SET_ERRORID_SPLITLIST_SPLITVALUE, _SET_ERRORMES_SPLITVALUE, _SET_ELEMENTPREMES, CodeList->count + 1);
+            SET_DestroyCodeList(CodeList);
             return NULL;
         }
 
@@ -1010,7 +1027,7 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
     return Type;
 }
 
-DIC_Dict *_SET_StructToDict(const SET_CodeStruct *Struct)
+DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
 {
     // Create a dictionary
     DIC_Dict *Dict = DIC_CreateDict(Struct->count);
@@ -1034,6 +1051,79 @@ DIC_Dict *_SET_StructToDict(const SET_CodeStruct *Struct)
     return Dict;
 }
 
+SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint32_t Depth)
+{
+
+}
+
+SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint32_t Depth)
+{
+    // Allocate memory
+    SET_Data *Data = (SET_Data *)malloc(sizeof(SET_Data));
+
+    if (Data == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_CONVERTVALUE_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_Data));
+        return NULL;
+    }
+
+    SET_InitData(Data);
+
+    // Find the type of value
+    switch (Value->type)
+    {
+        case (SET_VALUETYPE_LIST):
+            // Get the data
+            Data->data.list = _SET_ConvertList(Value->value.list);
+
+            if (Data->data.list == NULL)
+            {
+                _SET_AddError(_SET_ERRORID_CONVERTVALUE_LIST, _SET_ERRORMES_CONVERTLIST);
+                SET_DestroyData(Data);
+                return NULL;
+            }
+
+            // Set the type
+            Data->type = SET_DATATYPE_LIST;
+            break;
+
+        case (SET_VALUETYPE_STRUCT):
+            // Get the data
+            Data->data.stct = _SET_ConvertStruct(Value->value.sub);
+
+            if (Data->data.stct == NULL)
+            {
+                _SET_AddError(_SET_ERRORID_CONVERTVALUE_STRUCT, _SET_ERRORMES_CONVERTSTRUCT);
+                SET_DestroyData(Data);
+                return NULL;
+            }
+
+            // Set the type
+            Data->type = SET_DATATYPE_STRUCT;
+            break;
+
+        case (SET_VALUETYPE_VALUE):
+            // Figure out what type it is
+            SET_DataTypeBase PossibleType = _SET_GetPossibleType(Value->value.value);
+
+            // Read the type if defined
+            SET_DataType GivenType = SET_DATATYPE_NONE;
+
+            if (Value->value.value != NULL)
+                GivenType = _SET_ReadType(Value->value.value);
+
+            break;
+
+        default:
+            break;
+    }
+}
+
+SET_DataType _SET_ReadType(const char *Type, uint32_t *Pointer)
+{
+
+}
+
 void SET_InitData(SET_Data *Struct)
 {
     Struct->data.stct = NULL;
@@ -1044,6 +1134,8 @@ void SET_InitDataList(SET_DataList *Struct)
 {
     Struct->count = 0;
     Struct->list = NULL;
+    Struct->depth = 0;
+    Struct->type = SET_DATATYPE_CHAR;
 }
 
 void SET_InitCodeStruct(SET_CodeStruct *Struct)
