@@ -63,7 +63,8 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTSTRUCT_TYPE = 0x3000B0201,
     _SET_ERRORID_CONVERTSTRUCT_VALUE = 0x3000B0202,
     _SET_ERRORID_CONVERTSTRUCT_ADDITEM = 0x3000B0203,
-    _SET_ERRORID_CONVERTSTRUCT_DUBLICATE = 0x3000B0204
+    _SET_ERRORID_CONVERTSTRUCT_DUBLICATE = 0x3000B0204,
+    _SET_ERRORID_CONVERTLIST_MALLOC = 0x3000C0200
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -1113,7 +1114,19 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
 
 SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint8_t Depth)
 {
+    // Allocate memory
+    SET_DataList *List = (SET_DataList *)malloc(sizeof(SET_DataList));
 
+    if (List == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_CONVERTLIST_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_DataList));
+        return NULL;
+    }
+
+    SET_InitDataList(List);
+
+    // Go through each element in the list and convert them
+    //for (List->)
 }
 
 SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8_t Depth)
@@ -1134,7 +1147,7 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
     {
         case (SET_VALUETYPE_LIST):
             // Get the data
-            Data->data.list = _SET_ConvertList(Value->value.list);
+            Data->data.list = _SET_ConvertList(Value->value.list, Type, Depth - 1);
 
             if (Data->data.list == NULL)
             {

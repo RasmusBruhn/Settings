@@ -28,7 +28,7 @@ int main(int argc, char **argv)
 
     printf("Original string: %s\n\nCleaned String: %s\n\n\n", Settings, CleanString);
     printf("%u\n", CleanString[22]);
-    SET_CodeStruct *SplitString = _SET_SplitString(CleanString, "");
+    SET_CodeStruct *SplitString = _SET_SplitString(CleanString);
 
     if (SplitString == NULL)
     {
@@ -54,7 +54,7 @@ void PrintCodeStruct(SET_CodeStruct *Struct)
 {
     for (uint32_t Pos = 0; Pos < Struct->count; ++Pos)
     {
-        printf("Type: \"%s\", Pointer: %u, Name: \"%s\", Value:", Struct->names[Pos].type, Struct->names[Pos].pointer, Struct->names[Pos].name);
+        printf("Type: \"%s\", Pointer: %u, Name: \"%s\", Value:", Struct->names[Pos]->type, Struct->names[Pos]->pointer, Struct->names[Pos]->name);
         PrintCodeValue(Struct->values + Pos);
         printf("\n");
     }
