@@ -1033,7 +1033,7 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
             // Check if it really ends
             uint32_t SpecialCount = 0;
 
-            for (char *Current2 = Current - 1; *Current2 == '\\'; --Current2)
+            for (const char *Current2 = Current - 1; *Current2 == '\\'; --Current2)
                 ++SpecialCount;
 
             // Check that it ends
@@ -1070,7 +1070,7 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
         if (DIC_CheckItem(Dict, (*Names)->name))
         {
             _SET_SetError(_SET_ERRORID_CONVERTSTRUCT_DUBLICATE, _SET_ERRORMES_DUBLICATE, _SET_LINEPREMES, Names - Struct->names + 1);
-            SET_DestroyCodeStruct(Dict);
+            SET_DestroyDataStruct(Dict);
             return NULL;
         }
 
@@ -1115,15 +1115,15 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
 SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint8_t Depth)
 {
     // Allocate memory
-    SET_DataList *List = (SET_DataList *)malloc(sizeof(SET_DataList));
+    SET_DataList *ListObject = (SET_DataList *)malloc(sizeof(SET_DataList));
 
-    if (List == NULL)
+    if (ListObject == NULL)
     {
         _SET_AddErrorForeign(_SET_ERRORID_CONVERTLIST_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_DataList));
         return NULL;
     }
 
-    SET_InitDataList(List);
+    SET_InitDataList(ListObject);
 
     // Go through each element in the list and convert them
     //for (List->)
@@ -1141,6 +1141,8 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
     }
 
     SET_InitData(Data);
+    SET_DataTypeBase PossibleType;
+    SET_DataType GivenType;
 
     // Find the type of value
     switch (Value->type)
@@ -1177,10 +1179,10 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
 
         case (SET_VALUETYPE_VALUE):
             // Figure out what type it is
-            SET_DataTypeBase PossibleType = _SET_GetPossibleType(Value->value.value);
+            PossibleType = _SET_GetPossibleType(Value->value.value);
 
             // Read the type if defined
-            SET_DataType GivenType = SET_DATATYPE_NONE;
+            GivenType = SET_DATATYPE_NONE;
 
             if (Value->value.value != NULL)
                 GivenType = _SET_ReadType(Value->value.value);

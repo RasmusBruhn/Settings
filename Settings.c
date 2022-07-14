@@ -55,16 +55,16 @@ void PrintCodeStruct(SET_CodeStruct *Struct)
     for (uint32_t Pos = 0; Pos < Struct->count; ++Pos)
     {
         printf("Type: \"%s\", Pointer: %u, Name: \"%s\", Value:", Struct->names[Pos]->type, Struct->names[Pos]->pointer, Struct->names[Pos]->name);
-        PrintCodeValue(Struct->values + Pos);
+        PrintCodeValue(*Struct->values + Pos);
         printf("\n");
     }
 }
 
 void PrintCodeList(SET_CodeList *Struct)
 {
-    for (SET_CodeValue *List = Struct->list, *EndList = Struct->list + Struct->count; List < EndList; ++List)
+    for (SET_CodeValue **List = Struct->list, **EndList = Struct->list + Struct->count; List < EndList; ++List)
     {
-        PrintCodeValue(List);
+        PrintCodeValue(*List);
         printf("\n");
     }
 }
