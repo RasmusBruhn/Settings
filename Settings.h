@@ -59,7 +59,11 @@ enum _SET_ErrorID {
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALHEX = 0x3000A0105,
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALDOT = 0x3000A0106,
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALNUM = 0x3000A0107,
-    _SET_ERRORID_STRUCTTODICT_CREATEDICT = 0x3000B0200
+    _SET_ERRORID_CONVERTSTRUCT_CREATEDICT = 0x3000B0200,
+    _SET_ERRORID_CONVERTSTRUCT_TYPE = 0x3000B0201,
+    _SET_ERRORID_CONVERTSTRUCT_VALUE = 0x3000B0202,
+    _SET_ERRORID_CONVERTSTRUCT_ADDITEM = 0x3000B0203,
+    _SET_ERRORID_CONVERTSTRUCT_DUBLICATE = 0x3000B0204
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -93,6 +97,10 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_DICTEXIST "The dict has not been initialised"
 #define _SET_ERRORMES_UNKNOWNTYPE "Type is not in the database (%s)"
 #define _SET_ERRORMES_DICTITEM "Unable to retrieve item from dict (%s)"
+#define _SET_ERRORMES_READTYPE "Unable to read the type (%s: %s)"
+#define _SET_ERRORMES_READVALUE "Unable to read the value (%s: %s)"
+#define _SET_ERRORMES_DICTADD "Unable to add item to dict (%s)"
+#define _SET_ERRORMES_DUBLICATE "2 fields have been given the same name (%s: %s)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -102,7 +110,6 @@ enum __SET_ValueType {
 
 enum __SET_DataType {
     SET_DATATYPE_NONE,
-    SET_DATATYPE_ERR,
     SET_DATATYPE_INT,
     SET_DATATYPE_UINT8,
     SET_DATATYPE_UINT16,
@@ -229,10 +236,10 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value);
 DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct);
 
 // Converts a list from a string
-SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint32_t Depth);
+SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint8_t Depth);
 
 // Converts a single value from a string
-SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint32_t Depth);
+SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8_t Depth);
 
 // Reads the type
 SET_DataType _SET_ReadType(const char *Type);
@@ -1047,7 +1054,7 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
 
     if (Dict == NULL)
     {
-        _SET_AddErrorForeign(_SET_ERRORID_STRUCTTODICT_CREATEDICT, DIC_GetError(), _SET_ERRORMES_CREATEDICT);
+        _SET_AddErrorForeign(_SET_ERRORID_CONVERTSTRUCT_CREATEDICT, DIC_GetError(), _SET_ERRORMES_CREATEDICT);
         return NULL;
     }
 
@@ -1058,18 +1065,58 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
 
     for (; Names < EndNames; ++Names, ++Values)
     {
+        // Test if the item is already there
+        if (DIC_CheckItem(Dict, (*Names)->name))
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTSTRUCT_DUBLICATE, _SET_ERRORMES_DUBLICATE, _SET_LINEPREMES, Names - Struct->names + 1);
+            SET_DestroyCodeStruct(Dict);
+            return NULL;
+        }
 
+        // Get the type
+        SET_DataType Type = SET_DATATYPE_NONE;
+
+        if ((*Names)->type != NULL)
+        {
+            Type = _SET_ReadType((*Names)->type);
+
+            if (Type == SET_DATATYPE_NONE)
+            {
+                _SET_AddError(_SET_ERRORID_CONVERTSTRUCT_TYPE, _SET_ERRORMES_READTYPE, _SET_LINEPREMES, Names - Struct->names + 1);
+                SET_DestroyDataStruct(Dict);
+                return NULL;
+            }
+        }
+
+        // Read the value
+        SET_Data *Value = _SET_ConvertValue(*Values, Type, (*Names)->pointer);
+
+        if (Value == NULL)
+        {
+            _SET_AddError(_SET_ERRORID_CONVERTSTRUCT_VALUE, _SET_ERRORMES_READVALUE, _SET_LINEPREMES, Names - Struct->names + 1);
+            SET_DestroyDataStruct(Dict);
+            return NULL;
+        }
+
+        // Add to dict
+        if (!DIC_AddItem(Dict, (*Names)->name, (void *)Value, 0, DIC_MODE_POINTER))
+        {
+            _SET_AddErrorForeign(_SET_ERRORID_CONVERTSTRUCT_ADDITEM, _SET_ERRORMES_DICTADD, (*Names)->name);
+            SET_DestroyData(Value);
+            SET_DestroyDataStruct(Dict);
+            return NULL;
+        }
     }
 
     return Dict;
 }
 
-SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint32_t Depth)
+SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint8_t Depth)
 {
 
 }
 
-SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint32_t Depth)
+SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8_t Depth)
 {
     // Allocate memory
     SET_Data *Data = (SET_Data *)malloc(sizeof(SET_Data));
@@ -1140,14 +1187,14 @@ SET_DataType _SET_ReadType(const char *Type)
     if (_SET_TypeDict == NULL)
     {
         _SET_SetError(_SET_ERRORID_READTYPE_DICT, _SET_ERRORMES_DICTEXIST);
-        return SET_DATATYPE_ERR;
+        return SET_DATATYPE_NONE;
     }
 
     // Check that it exists
     if (!DIC_CheckItem(_SET_TypeDict, Type))
     {
         _SET_SetError(_SET_ERRORID_READTYPE_WRONGTYPE, _SET_ERRORMES_UNKNOWNTYPE, Type);
-        return SET_DATATYPE_ERR;
+        return SET_DATATYPE_NONE;
     }
 
     // Get the item
@@ -1156,7 +1203,7 @@ SET_DataType _SET_ReadType(const char *Type)
     if (DataType == NULL)
     {
         _SET_AddErrorForeign(_SET_ERRORID_READTYPE_RETRIEVE, DIC_GetError(), _SET_ERRORMES_DICTITEM, Type);
-        return SET_DATATYPE_ERR;
+        return SET_DATATYPE_NONE;
     }
 
     return *DataType;
