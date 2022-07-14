@@ -64,7 +64,10 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTSTRUCT_VALUE = 0x3000B0202,
     _SET_ERRORID_CONVERTSTRUCT_ADDITEM = 0x3000B0203,
     _SET_ERRORID_CONVERTSTRUCT_DUBLICATE = 0x3000B0204,
-    _SET_ERRORID_CONVERTLIST_MALLOC = 0x3000C0200
+    _SET_ERRORID_CONVERTLIST_MALLOC = 0x3000C0200,
+    _SET_ERRORID_CONVERTLIST_MALLOCLIST = 0x300C0201,
+    _SET_ERRORID_CONVERTLIST_VALUE = 0x3000C0202,
+    _SET_ERRORID_CONVERTLIST_TYPE = 0x3000C0203
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -102,6 +105,7 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_READVALUE "Unable to read the value (%s: %s)"
 #define _SET_ERRORMES_DICTADD "Unable to add item to dict (%s)"
 #define _SET_ERRORMES_DUBLICATE "2 fields have been given the same name (%s: %s)"
+#define _SET_ERRORMES_WRONGTYPE "Unknown type ID (%u)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -1124,9 +1128,91 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
     }
 
     SET_InitDataList(ListObject);
+    
+    // Add in the list
+    ListObject->list = (SET_Data **)malloc(sizeof(SET_Data *) * List->count);
+
+    if (ListObject->list == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_CONVERTLIST_MALLOCLIST, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_Data *) * List->count);
+        SET_DestroyDataList(ListObject);
+        return NULL;
+    }
+
+    for (SET_Data **Elements = ListObject->list, **EndElements = ListObject->list + List->count; Elements < EndElements; ++Elements)
+        *Elements = NULL;
+
+    ListObject->count = List->count;
 
     // Go through each element in the list and convert them
-    //for (List->)
+    SET_Data **DataList = ListObject->list;
+
+    for (SET_CodeValue **ValueList = List->list, **EndValueList = List->list + List->count; ValueList < EndValueList; ++ValueList, ++DataList)
+    {
+        // Convert value
+        *DataList = _SET_ConvertValue(*ValueList, Type, Depth);
+
+        if (*DataList == NULL)
+        {
+            _SET_AddError(_SET_ERRORID_CONVERTLIST_VALUE, _SET_ERRORMES_READVALUE, _SET_ELEMENTPREMES, ValueList - List->list);
+            SET_DestroyDataList(ListObject);
+            return NULL;
+        }
+    }
+
+    // Find the common type
+    SET_DataType CommonType = SET_DATATYPE_NONE;
+    
+    for (SET_Data **ValueList = ListObject->list, **EndValueList = ListObject->list + ListObject->count; ValueList < EndValueList; ++ValueList)
+        switch ((*ValueList)->type)
+        {
+            case (SET_DATATYPE_UINT8):
+                break;
+
+            case (SET_DATATYPE_UINT16):
+                break;
+
+            case (SET_DATATYPE_UINT32):
+                break;
+
+            case (SET_DATATYPE_UINT64):
+                break;
+
+            case (SET_DATATYPE_INT8):
+                break;
+
+            case (SET_DATATYPE_INT16):
+                break;
+
+            case (SET_DATATYPE_INT32):
+                break;
+
+            case (SET_DATATYPE_INT64):
+                break;
+
+            case (SET_DATATYPE_FLOAT):
+                break;
+
+            case (SET_DATATYPE_DOUBLE):
+                break;
+
+            case (SET_DATATYPE_CHAR):
+                break;
+
+            case (SET_DATATYPE_STR):
+                break;
+
+            case (SET_DATATYPE_LIST):
+                break;
+
+            case (SET_DATATYPE_STRUCT):
+                break;
+
+            default:
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPE, _SET_ERRORMES_WRONGTYPE, (*ValueList)->type);
+                SET_DestroyDataList(ListObject);
+                return NULL;
+        }
 }
 
 SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8_t Depth)
@@ -1227,7 +1313,7 @@ SET_DataType _SET_ReadType(const char *Type)
 void SET_InitData(SET_Data *Struct)
 {
     Struct->data.stct = NULL;
-    Struct->type = SET_DATATYPE_STRUCT;
+    Struct->type = SET_DATATYPE_NONE;
 }
 
 void SET_InitDataList(SET_DataList *Struct)
@@ -1235,7 +1321,7 @@ void SET_InitDataList(SET_DataList *Struct)
     Struct->count = 0;
     Struct->list = NULL;
     Struct->depth = 0;
-    Struct->type = SET_DATATYPE_CHAR;
+    Struct->type = SET_DATATYPE_NONE;
 }
 
 void SET_InitCodeStruct(SET_CodeStruct *Struct)
