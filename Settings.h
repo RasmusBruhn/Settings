@@ -35,6 +35,9 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTVALUE_MALLOC = 0x300050200,
     _SET_ERRORID_CONVERTVALUE_LIST = 0x300050201,
     _SET_ERRORID_CONVERTVALUE_STRUCT = 0x300050202,
+    _SET_ERRORID_READTYPE_DICT = 0x300060200,
+    _SET_ERRORID_READTYPE_WRONGTYPE = 0x300060201,
+    _SET_ERRORID_READTYPE_RETRIEVE = 0x300060202,
     _SET_ERRORID_SPLITVALUE_ENDSTRUCT = 0x300070200,
     _SET_ERRORID_SPLITVALUE_CREATESUBSTRUCT = 0x300070201,
     _SET_ERRORID_SPLITVALUE_ENDLIST = 0x300070202,
@@ -87,6 +90,9 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_CREATEDICT "Unable to create a dictionary"
 #define _SET_ERRORMES_CONVERTLIST "Unable to convert list"
 #define _SET_ERRORMES_CONVERTSTRUCT "Unable to convert struct"
+#define _SET_ERRORMES_DICTEXIST "The dict has not been initialised"
+#define _SET_ERRORMES_UNKNOWNTYPE "Type is not in the database (%s)"
+#define _SET_ERRORMES_DICTITEM "Unable to retrieve item from dict (%s)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -96,6 +102,7 @@ enum __SET_ValueType {
 
 enum __SET_DataType {
     SET_DATATYPE_NONE,
+    SET_DATATYPE_ERR,
     SET_DATATYPE_INT,
     SET_DATATYPE_UINT8,
     SET_DATATYPE_UINT16,
@@ -198,6 +205,7 @@ char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<'
 // Types
 char *_SET_TypeNames[] = {"int", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float", "double", "char", "str", "struct"};
 SET_DataType _SET_Types[] = {SET_DATATYPE_INT, SET_DATATYPE_UINT8, SET_DATATYPE_UINT16, SET_DATATYPE_UINT32, SET_DATATYPE_UINT64, SET_DATATYPE_INT8, SET_DATATYPE_INT16, SET_DATATYPE_INT32, SET_DATATYPE_INT64, SET_DATATYPE_FLOAT, SET_DATATYPE_DOUBLE, SET_DATATYPE_CHAR, SET_DATATYPE_STR, SET_DATATYPE_STRUCT};
+DIC_Dict *_SET_TypeDict = NULL;
 
 #define _SET_LINEPREMES "Line"
 #define _SET_ELEMENTPREMES "Element"
@@ -1126,7 +1134,32 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint3
 
 SET_DataType _SET_ReadType(const char *Type)
 {
+    // Make sure the dict exists
+    extern DIC_Dict *_SET_TypeDict;
 
+    if (_SET_TypeDict == NULL)
+    {
+        _SET_SetError(_SET_ERRORID_READTYPE_DICT, _SET_ERRORMES_DICTEXIST);
+        return SET_DATATYPE_ERR;
+    }
+
+    // Check that it exists
+    if (!DIC_CheckItem(_SET_TypeDict, Type))
+    {
+        _SET_SetError(_SET_ERRORID_READTYPE_WRONGTYPE, _SET_ERRORMES_UNKNOWNTYPE, Type);
+        return SET_DATATYPE_ERR;
+    }
+
+    // Get the item
+    SET_DataType *DataType = (SET_DataType *)DIC_GetItem(_SET_TypeDict, Type);
+
+    if (DataType == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_READTYPE_RETRIEVE, DIC_GetError(), _SET_ERRORMES_DICTITEM, Type);
+        return SET_DATATYPE_ERR;
+    }
+
+    return *DataType;
 }
 
 void SET_InitData(SET_Data *Struct)
