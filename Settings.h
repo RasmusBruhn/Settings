@@ -68,11 +68,27 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTLIST_MALLOCLIST = 0x300C0201,
     _SET_ERRORID_CONVERTLIST_VALUE = 0x3000C0202,
     _SET_ERRORID_CONVERTLIST_TYPE = 0x3000C0203,
-    _SET_ERRORID_CONVERTLIST_LISTMATCH = 0x3000C0204,
+    _SET_ERRORID_CONVERTLIST_LISTELEMENT = 0x3000C0204,
     _SET_ERRORID_CONVERTLIST_NOELEMENTS = 0x3000C0205,
-    _SET_ERRORID_CONVERTLIST_LISTMATCH2 = 0x3000C0206,
-    _SET_ERRORID_CONVERTLIST_TYPEMATCH = 0x3000C0207,
-    _SET_ERRORID_CONVERTLIST_NUMBERMATCH = 0x3000C0208
+    _SET_ERRORID_CONVERTLIST_LISTELEMENT2 = 0x3000C0206,
+    _SET_ERRORID_CONVERTLIST_TYPEELEMENT = 0x3000C0207,
+    _SET_ERRORID_CONVERTLIST_NUMBERELEMENT = 0x3000C0208,
+    _SET_ERRORID_CONVERTLIST_DEPTHMATCH = 0x3000C0209,
+    _SET_ERRORID_CONVERTLIST_TYPEMATCH = 0x3000C020A,
+    _SET_ERRORID_CONVERTLIST_TYPEMATCH2 = 0x3000C020B,
+    _SET_ERRORID_CONVERTLIST_FLOATMATCH = 0x3000C020C,
+    _SET_ERRORID_CONVERTLIST_SINTMATCH = 0x3000C020D,
+    _SET_ERRORID_CONVERTLIST_SINTMATCH2 = 0x3000C020E,
+    _SET_ERRORID_CONVERTLIST_INTMATCH = 0x3000C020F,
+    _SET_ERRORID_CONVERTLIST_NUMBERMATCH = 0x3000C0210,
+    _SET_ERRORID_CONVERTTYPE_NOSTRUCT = 0x3000D0200,
+    _SET_ERRORID_CONVERTTYPE_TYPEMATCH = 0x3000D0201,
+    _SET_ERRORID_CONVERTTYPE_TYPEMATCH2 = 0x3000D0202,
+    _SET_ERRORID_CONVERTTYPE_NUMBERMATCH = 0x3000D0203,
+    _SET_ERRORID_CONVERTTYPE_FLOATMATCH = 0x3000D0204,
+    _SET_ERRORID_CONVERTTYPE_SINTMATCH = 0x3000D0205,
+    _SET_ERRORID_CONVERTTYPE_SINTMATCH2 = 0x3000D0206,
+    _SET_ERRORID_CONVERTTYPE_INTMATCH = 0x3000D0207
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -111,10 +127,18 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_DICTADD "Unable to add item to dict (%s)"
 #define _SET_ERRORMES_DUBLICATE "2 fields have been given the same name (%s: %s)"
 #define _SET_ERRORMES_WRONGTYPE "Unknown type ID (%u)"
-#define _SET_ERRORMES_LISTMATCH "If one element is a list, they all must be a list of the same depth (%s: %s)"
+#define _SET_ERRORMES_LISTELEMENT "If one element is a list, they all must be a list of the same depth (%s: %s)"
 #define _SET_ERRORMES_NOELEMENTS "A list must have at least one element"
-#define _SET_ERRORMES_TYPEMATCH "If one element is either a char, string or struct all other elements must be too (%s: %s)"
-#define _SET_ERRORMES_NUMBERMATCH "If one element is a number all other elements must be too (%s: %s)"
+#define _SET_ERRORMES_TYPEELEMENT "If one element is either a char, string or struct all other elements must be too (%s: %s)"
+#define _SET_ERRORMES_NUMBERELEMENT "If one element is a number all other elements must be too (%s: %s)"
+#define _SET_ERRORMES_DEPTHMATCH "List did not have expected depth (Expected: %u, received: %u)"
+#define _SET_ERRORMES_TYPEMATCH "Value did not have expected type (Expected: %u, received: %u)"
+#define _SET_ERRORMES_FLOATMATCH "Unable to convert a float into an int"
+#define _SET_ERRORMES_SINTMATCH "Unable to convert an interger into a smaller interger (Goal: %u, received: %u)"
+#define _SET_ERRORMES_SINTMATCH2 "Unable to convert a signed integer into an unsigned integer (Goal: %u, received: %u)"
+#define _SET_ERRORMES_INTMATCH "Unable to convert an unsigned integer into a smaller unsigned integer (Goal: %u, received: %u)"
+#define _SET_ERRORMES_NOSTRUCT "Structs and lists cannot be converted"
+#define _SET_ERRORMES_NUMBERMATCH "Cannot convert a non-number into a number (Received: %u)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -147,8 +171,8 @@ enum __SET_DataType {
 
 enum __SET_DataTypeBase {
     SET_DATATYPEBASE_NONE = 0x00,
-    SET_DATATYPEBASE_INT = 0x01,
-    SET_DATATYPEBASE_UINT = 0x02,
+    SET_DATATYPEBASE_UINT = 0x01,
+    SET_DATATYPEBASE_SINT = 0x02,
     SET_DATATYPEBASE_FLOAT = 0x04,
     SET_DATATYPEBASE_CHAR = 0x08,
     SET_DATATYPEBASE_STRING = 0x10
@@ -261,6 +285,9 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
 
 // Reads the type
 SET_DataType _SET_ReadType(const char *Type);
+
+// Converts data to a specific type, does not convert lists or structs
+SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type);
 
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
@@ -934,7 +961,7 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
 
         // Signed
         case ('-'):
-            Type = SET_DATATYPEBASE_INT | SET_DATATYPEBASE_FLOAT;
+            Type = SET_DATATYPEBASE_SINT | SET_DATATYPEBASE_FLOAT;
             break;
 
         // Hex or Bin
@@ -955,14 +982,14 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
                     break;
                 
                 default:
-                    Type = SET_DATATYPEBASE_INT | SET_DATATYPEBASE_UINT | SET_DATATYPEBASE_FLOAT;
+                    Type = SET_DATATYPEBASE_SINT | SET_DATATYPEBASE_UINT | SET_DATATYPEBASE_FLOAT;
                     Current -= 2;
                     break;
             }
             break;
         
         default:
-            Type = SET_DATATYPEBASE_INT | SET_DATATYPEBASE_UINT | SET_DATATYPEBASE_FLOAT;
+            Type = SET_DATATYPEBASE_SINT | SET_DATATYPEBASE_UINT | SET_DATATYPEBASE_FLOAT;
             --Current;
             break;
     }
@@ -1196,7 +1223,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
         {
             if ((*ValueList)->type != SET_DATATYPE_LIST || (*ValueList)->data.list->depth != CommonDepth || (*ValueList)->data.list->type != CommonType)
             {
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_LISTMATCH, _SET_ERRORMES_LISTMATCH, _SET_ELEMENTPREMES, ValueList - ListObject->list);
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_LISTELEMENT, _SET_ERRORMES_LISTELEMENT, _SET_ELEMENTPREMES, ValueList - ListObject->list);
                 SET_DestroyDataList(ListObject);
                 return NULL;
             }
@@ -1204,7 +1231,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
 
         else if ((*ValueList)->type == SET_DATATYPE_LIST)
         {
-            _SET_SetError(_SET_ERRORID_CONVERTLIST_LISTMATCH2, _SET_ERRORMES_LISTMATCH, _SET_ELEMENTPREMES, ValueList - ListObject->list);
+            _SET_SetError(_SET_ERRORID_CONVERTLIST_LISTELEMENT2, _SET_ERRORMES_LISTELEMENT, _SET_ELEMENTPREMES, ValueList - ListObject->list);
             SET_DestroyDataList(ListObject);
             return NULL;
         }
@@ -1214,7 +1241,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
         {
             if ((*ValueList)->type != CommonType)
             {
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPEMATCH, _SET_ERRORMES_TYPEMATCH, _SET_ELEMENTPREMES, ValueList - ListObject->list);
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPEELEMENT, _SET_ERRORMES_TYPEELEMENT, _SET_ELEMENTPREMES, ValueList - ListObject->list);
                 SET_DestroyDataList(ListObject);
                 return NULL;
             }
@@ -1226,7 +1253,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
             // Make sure it is supposed to be a number
             if (!(CommonType >= SET_DATATYPE_UINT8 && CommonType <= SET_DATATYPE_DOUBLE))
             {
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_NUMBERMATCH, _SET_ERRORMES_NUMBERMATCH, _SET_ELEMENTPREMES, ValueList - ListObject->list);
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_NUMBERELEMENT, _SET_ERRORMES_NUMBERELEMENT, _SET_ELEMENTPREMES, ValueList - ListObject->list);
                 SET_DestroyDataList(ListObject);
                 return NULL;
             }
@@ -1276,6 +1303,104 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
             return NULL;
         }
     }
+
+    // Make sure the type is legal
+    if (Type != SET_DATATYPE_NONE)
+    {
+        // Make sure the list is correct
+        if (CommonDepth != Depth)
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTLIST_DEPTHMATCH, _SET_ERRORMES_DEPTHMATCH, Depth, CommonDepth);
+            SET_DestroyDataList(ListObject);
+            return NULL;
+        }
+
+        // Make sure the type is correct
+        if (Type >= SET_DATATYPE_CHAR && Type <= SET_DATATYPE_STRUCT)
+        {
+            if (Type != CommonType)
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPEMATCH, _SET_ERRORMES_TYPEMATCH, Type, CommonType);
+                SET_DestroyDataList(ListObject);
+                return NULL;
+            }
+        }
+
+        // Make sure the int match up
+        else if (Type >= SET_DATATYPE_INT8 && Type <= SET_DATATYPE_FLOAT)
+        {
+            if (!(CommonType >= SET_DATATYPE_INT8 && CommonType <= SET_DATATYPE_FLOAT))
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_NUMBERMATCH, _SET_ERRORMES_NUMBERMATCH, CommonType);
+                SET_DestroyDataList(ListObject);
+                return NULL;
+            }
+
+            else if (Type >= SET_DATATYPE_DOUBLE)
+                ;
+
+            else if (CommonType >= SET_DATATYPE_DOUBLE)
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_FLOATMATCH, _SET_ERRORMES_FLOATMATCH);
+                SET_DestroyDataList(ListObject);
+                return NULL;
+            }
+
+            else if (Type >= SET_DATATYPE_SINT8)
+            {
+                uint8_t CommonSize;
+
+                if (CommonType >= SET_DATATYPE_SINT8)
+                    CommonSize = CommonType - SET_DATATYPE_SINT8;
+
+                else
+                    CommonSize = (CommonType - SET_DATATYPE_INT8 + 1) / 2;
+
+                if (CommonSize > Type - SET_DATATYPE_SINT8)
+                {
+                    _SET_SetError(_SET_ERRORID_CONVERTLIST_SINTMATCH, _SET_ERRORMES_SINTMATCH, Type, CommonType);
+                    SET_DestroyDataList(ListObject);
+                    return NULL;
+                }
+            }
+
+            else if (CommonType >= SET_DATATYPE_SINT8)
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_SINTMATCH2, _SET_ERRORMES_SINTMATCH2, Type, CommonType);
+                SET_DestroyDataList(ListObject);
+                return NULL;
+            }
+
+            else if (CommonType > Type)
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_INTMATCH, _SET_ERRORMES_INTMATCH, Type, CommonType);
+                SET_DestroyDataList(ListObject);
+                return NULL;
+            }
+        }
+
+        else
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPEMATCH2, _SET_ERRORMES_TYPEMATCH, Type, CommonType);
+            SET_DestroyDataList(ListObject);
+            return NULL;
+        }
+
+        // Set type
+        CommonType = Type;
+    }
+
+    // Convert elements to the same type
+    if (CommonDepth == 0 && CommonType >= SET_DATATYPE_INT8 && CommonType <= SET_DATATYPE_FLOAT)
+        for (SET_Data **ValueList = ListObject->list, **EndValueList = ListObject->list + ListObject->count; ValueList < EndValueList; ++ValueList)
+            if ((*ValueList)->type != CommonType)
+                **ValueList = _SET_ConvertType(*ValueList, CommonType);
+
+    // Finish up
+    ListObject->type = CommonType;
+    ListObject->depth = CommonDepth + 1;
+
+    return ListObject;
 }
 
 SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8_t Depth)
@@ -1371,6 +1496,205 @@ SET_DataType _SET_ReadType(const char *Type)
     }
 
     return *DataType;
+}
+
+SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
+{
+    // Setup output
+    SET_Data NewData;
+    SET_InitData(&NewData);
+
+    // Make sure it is legal
+    if (Type == SET_DATATYPE_LIST || Type == SET_DATATYPE_STRUCT)
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTTYPE_NOSTRUCT, _SET_ERRORMES_NOSTRUCT);
+        return NewData;
+    }
+
+    // Do the standalones
+    else if (Type == SET_DATATYPE_CHAR || Type == SET_DATATYPE_STR)
+    {
+        if (Type != Data->type)
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTTYPE_TYPEMATCH, _SET_ERRORMES_TYPEMATCH, Type, Data->type);
+            return NewData;
+        }
+    }
+
+    // Make sure the number match up
+    else if (Type >= SET_DATATYPE_INT8 && Type <= SET_DATATYPE_FLOAT)
+    {
+        if (!(Data->type >= SET_DATATYPE_INT8 && Data->type <= SET_DATATYPE_FLOAT))
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTTYPE_NUMBERMATCH, _SET_ERRORMES_NUMBERMATCH, Data->type);
+            return NewData;
+        }
+
+        else if (Type >= SET_DATATYPE_DOUBLE)
+            ;
+
+        else if (Data->type >= SET_DATATYPE_DOUBLE)
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTTYPE_FLOATMATCH, _SET_ERRORMES_FLOATMATCH);
+            return NewData;
+        }
+
+        else if (Type >= SET_DATATYPE_SINT8)
+        {
+            uint8_t Size;
+
+            if (Data->type >= SET_DATATYPE_SINT8)
+                Size = Data->type - SET_DATATYPE_SINT8;
+
+            else
+                Size = (Data->type - SET_DATATYPE_INT8 + 1) / 2;
+
+            if (Size > Type - SET_DATATYPE_SINT8)
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTTYPE_SINTMATCH, _SET_ERRORMES_SINTMATCH, Type, Data->type);
+                return NewData;
+            }
+        }
+
+        else if (Data->type >= SET_DATATYPE_SINT8)
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTTYPE_SINTMATCH2, _SET_ERRORMES_SINTMATCH2, Type, Data->type);
+            return NewData;
+        }
+
+        else if (Data->type > Type)
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTTYPE_INTMATCH, _SET_ERRORMES_INTMATCH, Type, Data->type);
+            return NewData;
+        }
+    }
+
+    else
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTTYPE_TYPEMATCH2, _SET_ERRORMES_TYPEMATCH, Type, Data->type);
+        return NewData;
+    }
+
+    NewData.type = Type;
+
+    // Convert the type to a general type
+    uint64_t Uint;
+    int64_t Sint;
+    double Float;
+
+    switch (Data->type)
+    {
+        // If a char or string, just return
+        case (SET_DATATYPE_CHAR):
+        case (SET_DATATYPE_STR):
+            return *Data;
+
+        // If an unsigned int
+        case (SET_DATATYPE_INT8):
+        case (SET_DATATYPE_UINT8):
+            Uint = (uint64_t)Data->data.u8;
+            break;
+
+        case (SET_DATATYPE_INT16):
+        case (SET_DATATYPE_UINT16):
+            Uint = (uint64_t)Data->data.u16;
+            break;
+
+        case (SET_DATATYPE_INT32):
+        case (SET_DATATYPE_UINT32):
+            Uint = (uint64_t)Data->data.u32;
+            break;
+
+        case (SET_DATATYPE_INT64):
+        case (SET_DATATYPE_UINT64):
+            Uint = (uint64_t)Data->data.u64;
+            break;
+
+        // If signed int
+        case (SET_DATATYPE_SINT8):
+            Sint = (int64_t)Data->data.i8;
+            break;
+
+        case (SET_DATATYPE_SINT16):
+            Sint = (int64_t)Data->data.i16;
+            break;
+
+        case (SET_DATATYPE_SINT32):
+            Sint = (int64_t)Data->data.i32;
+            break;
+
+        case (SET_DATATYPE_SINT64):
+            Sint = (int64_t)Data->data.i64;
+            break;
+
+        // If float
+        case (SET_DATATYPE_FLOAT):
+            Float = (double)Data->data.f;
+            break;
+
+        case (SET_DATATYPE_DOUBLE):
+            Float = (double)Data->data.d;
+            break;
+
+        default:
+            break;
+    }
+
+    // Convert to the correct type
+    switch (Type)
+    {
+        // Unsigned int
+        case (SET_DATATYPE_INT8):
+        case (SET_DATATYPE_UINT8):
+            NewData.data.u8 = (uint8_t)Uint;
+            break;
+
+        case (SET_DATATYPE_INT16):
+        case (SET_DATATYPE_UINT16):
+            NewData.data.u16 = (uint16_t)Uint;
+            break;
+
+        case (SET_DATATYPE_INT32):
+        case (SET_DATATYPE_UINT32):
+            NewData.data.u32 = (uint32_t)Uint;
+            break;
+
+        case (SET_DATATYPE_INT64):
+        case (SET_DATATYPE_UINT64):
+            NewData.data.u64 = (uint64_t)Uint;
+            break;
+
+        // Signed int
+        case (SET_DATATYPE_SINT8):
+            NewData.data.i8 = (int8_t)Sint;
+            break;
+
+        case (SET_DATATYPE_SINT16):
+            NewData.data.i16 = (int16_t)Sint;
+            break;
+
+        case (SET_DATATYPE_SINT32):
+            NewData.data.i32 = (int32_t)Sint;
+            break;
+
+        case (SET_DATATYPE_SINT64):
+            NewData.data.i64 = (int64_t)Sint;
+            break;
+
+        // Float
+        case (SET_DATATYPE_FLOAT):
+            NewData.data.f = (float)Float;
+            break;
+
+        case (SET_DATATYPE_DOUBLE):
+            NewData.data.d = (double)Float;
+            break;
+
+        default:
+            break;
+    }
+
+    return NewData;
 }
 
 void SET_InitData(SET_Data *Struct)
