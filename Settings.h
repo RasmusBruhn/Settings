@@ -67,7 +67,12 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTLIST_MALLOC = 0x3000C0200,
     _SET_ERRORID_CONVERTLIST_MALLOCLIST = 0x300C0201,
     _SET_ERRORID_CONVERTLIST_VALUE = 0x3000C0202,
-    _SET_ERRORID_CONVERTLIST_TYPE = 0x3000C0203
+    _SET_ERRORID_CONVERTLIST_TYPE = 0x3000C0203,
+    _SET_ERRORID_CONVERTLIST_LISTMATCH = 0x3000C0204,
+    _SET_ERRORID_CONVERTLIST_NOELEMENTS = 0x3000C0205,
+    _SET_ERRORID_CONVERTLIST_LISTMATCH2 = 0x3000C0206,
+    _SET_ERRORID_CONVERTLIST_TYPEMATCH = 0x3000C0207,
+    _SET_ERRORID_CONVERTLIST_NUMBERMATCH = 0x3000C0208
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -106,6 +111,10 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_DICTADD "Unable to add item to dict (%s)"
 #define _SET_ERRORMES_DUBLICATE "2 fields have been given the same name (%s: %s)"
 #define _SET_ERRORMES_WRONGTYPE "Unknown type ID (%u)"
+#define _SET_ERRORMES_LISTMATCH "If one element is a list, they all must be a list of the same depth (%s: %s)"
+#define _SET_ERRORMES_NOELEMENTS "A list must have at least one element"
+#define _SET_ERRORMES_TYPEMATCH "If one element is either a char, string or struct all other elements must be too (%s: %s)"
+#define _SET_ERRORMES_NUMBERMATCH "If one element is a number all other elements must be too (%s: %s)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -116,16 +125,20 @@ enum __SET_ValueType {
 enum __SET_DataType {
     SET_DATATYPE_NONE,
     SET_DATATYPE_INT,
-    SET_DATATYPE_UINT8,
-    SET_DATATYPE_UINT16,
-    SET_DATATYPE_UINT32,
-    SET_DATATYPE_UINT64,
     SET_DATATYPE_INT8,
+    SET_DATATYPE_UINT8,
     SET_DATATYPE_INT16,
+    SET_DATATYPE_UINT16,
     SET_DATATYPE_INT32,
+    SET_DATATYPE_UINT32,
     SET_DATATYPE_INT64,
-    SET_DATATYPE_FLOAT,
+    SET_DATATYPE_UINT64,
+    SET_DATATYPE_SINT8,
+    SET_DATATYPE_SINT16,
+    SET_DATATYPE_SINT32,
+    SET_DATATYPE_SINT64,
     SET_DATATYPE_DOUBLE,
+    SET_DATATYPE_FLOAT,
     SET_DATATYPE_CHAR,
     SET_DATATYPE_STR,
     SET_DATATYPE_STRUCT,
@@ -216,7 +229,7 @@ char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<'
 
 // Types
 char *_SET_TypeNames[] = {"int", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float", "double", "char", "str", "struct"};
-SET_DataType _SET_Types[] = {SET_DATATYPE_INT, SET_DATATYPE_UINT8, SET_DATATYPE_UINT16, SET_DATATYPE_UINT32, SET_DATATYPE_UINT64, SET_DATATYPE_INT8, SET_DATATYPE_INT16, SET_DATATYPE_INT32, SET_DATATYPE_INT64, SET_DATATYPE_FLOAT, SET_DATATYPE_DOUBLE, SET_DATATYPE_CHAR, SET_DATATYPE_STR, SET_DATATYPE_STRUCT};
+SET_DataType _SET_Types[] = {SET_DATATYPE_INT, SET_DATATYPE_UINT8, SET_DATATYPE_UINT16, SET_DATATYPE_UINT32, SET_DATATYPE_UINT64, SET_DATATYPE_SINT8, SET_DATATYPE_SINT16, SET_DATATYPE_SINT32, SET_DATATYPE_SINT64, SET_DATATYPE_FLOAT, SET_DATATYPE_DOUBLE, SET_DATATYPE_CHAR, SET_DATATYPE_STR, SET_DATATYPE_STRUCT};
 DIC_Dict *_SET_TypeDict = NULL;
 
 #define _SET_LINEPREMES "Line"
@@ -1118,6 +1131,12 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
 
 SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint8_t Depth)
 {
+    if (List->count == 0)
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTLIST_NOELEMENTS, _SET_ERRORMES_NOELEMENTS);
+        return NULL;
+    }
+
     // Allocate memory
     SET_DataList *ListObject = (SET_DataList *)malloc(sizeof(SET_DataList));
 
@@ -1150,7 +1169,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
     for (SET_CodeValue **ValueList = List->list, **EndValueList = List->list + List->count; ValueList < EndValueList; ++ValueList, ++DataList)
     {
         // Convert value
-        *DataList = _SET_ConvertValue(*ValueList, Type, Depth);
+        *DataList = _SET_ConvertValue(*ValueList, Type, Depth - 1);
 
         if (*DataList == NULL)
         {
@@ -1161,58 +1180,102 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
     }
 
     // Find the common type
-    SET_DataType CommonType = SET_DATATYPE_NONE;
+    SET_DataType CommonType = (*ListObject->list)->type;
+    uint8_t CommonDepth = 0;
+
+    if (CommonType == SET_DATATYPE_LIST)
+    {
+        CommonType = (*ListObject->list)->data.list->type;
+        CommonDepth = (*ListObject->list)->data.list->depth;
+    }
     
-    for (SET_Data **ValueList = ListObject->list, **EndValueList = ListObject->list + ListObject->count; ValueList < EndValueList; ++ValueList)
-        switch ((*ValueList)->type)
+    for (SET_Data **ValueList = ListObject->list + 1, **EndValueList = ListObject->list + ListObject->count; ValueList < EndValueList; ++ValueList)
+    {
+        // Check for lists
+        if (CommonDepth > 0)
         {
-            case (SET_DATATYPE_UINT8):
-                break;
-
-            case (SET_DATATYPE_UINT16):
-                break;
-
-            case (SET_DATATYPE_UINT32):
-                break;
-
-            case (SET_DATATYPE_UINT64):
-                break;
-
-            case (SET_DATATYPE_INT8):
-                break;
-
-            case (SET_DATATYPE_INT16):
-                break;
-
-            case (SET_DATATYPE_INT32):
-                break;
-
-            case (SET_DATATYPE_INT64):
-                break;
-
-            case (SET_DATATYPE_FLOAT):
-                break;
-
-            case (SET_DATATYPE_DOUBLE):
-                break;
-
-            case (SET_DATATYPE_CHAR):
-                break;
-
-            case (SET_DATATYPE_STR):
-                break;
-
-            case (SET_DATATYPE_LIST):
-                break;
-
-            case (SET_DATATYPE_STRUCT):
-                break;
-
-            default:
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPE, _SET_ERRORMES_WRONGTYPE, (*ValueList)->type);
+            if ((*ValueList)->type != SET_DATATYPE_LIST || (*ValueList)->data.list->depth != CommonDepth || (*ValueList)->data.list->type != CommonType)
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_LISTMATCH, _SET_ERRORMES_LISTMATCH, _SET_ELEMENTPREMES, ValueList - ListObject->list);
                 SET_DestroyDataList(ListObject);
                 return NULL;
+            }
         }
+
+        else if ((*ValueList)->type == SET_DATATYPE_LIST)
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTLIST_LISTMATCH2, _SET_ERRORMES_LISTMATCH, _SET_ELEMENTPREMES, ValueList - ListObject->list);
+            SET_DestroyDataList(ListObject);
+            return NULL;
+        }
+
+        // Check for special types
+        else if ((*ValueList)->type >= SET_DATATYPE_CHAR && (*ValueList)->type <= SET_DATATYPE_STRUCT)
+        {
+            if ((*ValueList)->type != CommonType)
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPEMATCH, _SET_ERRORMES_TYPEMATCH, _SET_ELEMENTPREMES, ValueList - ListObject->list);
+                SET_DestroyDataList(ListObject);
+                return NULL;
+            }
+        }
+
+        // Check for numbers
+        else if ((*ValueList)->type >= SET_DATATYPE_INT8 && (*ValueList)->type <= SET_DATATYPE_FLOAT)
+        {
+            // Make sure it is supposed to be a number
+            if (!(CommonType >= SET_DATATYPE_UINT8 && CommonType <= SET_DATATYPE_DOUBLE))
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTLIST_NUMBERMATCH, _SET_ERRORMES_NUMBERMATCH, _SET_ELEMENTPREMES, ValueList - ListObject->list);
+                SET_DestroyDataList(ListObject);
+                return NULL;
+            }
+
+            // Find out what number it must be
+            // Floats
+            if (CommonType == SET_DATATYPE_DOUBLE || (*ValueList)->type == SET_DATATYPE_DOUBLE)
+                CommonType = SET_DATATYPE_DOUBLE;
+
+            else if (CommonType == SET_DATATYPE_FLOAT || (*ValueList)->type == SET_DATATYPE_FLOAT)
+                CommonType = SET_DATATYPE_FLOAT;
+
+            // Signed ints
+            else if (CommonType >= SET_DATATYPE_SINT8 || (*ValueList)->type >= SET_DATATYPE_SINT8)
+            {
+                // Get what type of signed int it should be
+                uint8_t CommonSize;
+                uint8_t ValueSize;
+
+                if (CommonType >= SET_DATATYPE_SINT8)
+                    CommonSize = CommonType - SET_DATATYPE_SINT8;
+
+                else
+                    CommonSize = (CommonType - SET_DATATYPE_INT8 + 1) / 2;
+
+                if ((*ValueList)->type >= SET_DATATYPE_SINT8)
+                    ValueSize = (*ValueList)->type - SET_DATATYPE_SINT8;
+
+                else
+                    ValueSize = ((*ValueList)->type - SET_DATATYPE_INT8 + 1) / 2;
+
+                if (ValueSize > CommonSize)
+                    CommonSize = ValueSize;
+
+                CommonType = SET_DATATYPE_SINT8 + CommonSize;
+            }
+
+            // Not a signed int
+            else if ((*ValueList)->type > CommonType)
+                CommonType = (*ValueList)->type;
+        }
+
+        else
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPE, _SET_ERRORMES_WRONGTYPE, (*ValueList)->type);
+            SET_DestroyDataList(ListObject);
+            return NULL;
+        }
+    }
 }
 
 SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8_t Depth)
