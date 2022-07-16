@@ -120,22 +120,22 @@ enum _SET_ErrorID {
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
 #define _SET_ERRORMES_REALLOC "Unable to reallocate memory (Size: %lu)"
-#define _SET_ERRORMES_EARLYSTOPCHAR "File ended unexpectedly inside char definition (%s: %s)"
-#define _SET_ERRORMES_NOSTOPCHAR "Expected a maximum of one character in char definition (%s: %s)"
+#define _SET_ERRORMES_EARLYSTOPCHAR "File ended unexpectedly inside char definition (%s: %u)"
+#define _SET_ERRORMES_NOSTOPCHAR "Expected a maximum of one character in char definition (%s: %u)"
 #define _SET_ERRORMES_VALUEKEY "Unknown value key (%u)"
 #define _SET_ERRORMES_FIELDNULL "A field is NULL"
-#define _SET_ERRORMES_SPACEINVALUE "Found unexpected space in value (%s: %s)"
-#define _SET_ERRORMES_TYPETWICE "Found two type definitions (%s: %s)"
-#define _SET_ERRORMES_VALUETWICE "Found two values (%s: %s)"
-#define _SET_ERRORMES_NOVALUE "Found no values (%s: %s)"
+#define _SET_ERRORMES_SPACEINVALUE "Found unexpected space in value (%s: %u)"
+#define _SET_ERRORMES_TYPETWICE "Found two type definitions (%s: %u)"
+#define _SET_ERRORMES_VALUETWICE "Found two values (%s: %u)"
+#define _SET_ERRORMES_NOVALUE "Found no values (%s: %u)"
 #define _SET_ERRORMES_NOVALUE2 "Found no values"
 #define _SET_ERRORMES_WRONGEND "File ended unexpectedly"
 #define _SET_ERRORMES_ENDSTRUCT "Expected } to end struct definition"
 #define _SET_ERRORMES_SUBSTRUCT "Unable to split substruct"
 #define _SET_ERRORMES_ENDLIST "Expected ] to end list definition"
 #define _SET_ERRORMES_SUBLIST "Unable to split list"
-#define _SET_ERRORMES_SPLITVALUE "Unable to split value (%s: %s)"
-#define _SET_ERRORMES_ENDSTRING "File ended unexpectedly inside a string definition (%s: %s)"
+#define _SET_ERRORMES_SPLITVALUE "Unable to split value (%s: %u)"
+#define _SET_ERRORMES_ENDSTRING "File ended unexpectedly inside a string definition (%s: %u)"
 #define _SET_ERRORMES_NOSTRING "Found no string"
 #define _SET_ERRORMES_NOENDCHAR "Char value ended without \' (%s)"
 #define _SET_ERRORMES_NOENDSTRING "String value ended without \" (%s)"
@@ -151,15 +151,15 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_DICTEXIST "The dict has not been initialised"
 #define _SET_ERRORMES_UNKNOWNTYPE "Type is not in the database (%s)"
 #define _SET_ERRORMES_DICTITEM "Unable to retrieve item from dict (%s)"
-#define _SET_ERRORMES_READTYPE "Unable to read the type (%s: %s)"
-#define _SET_ERRORMES_READVALUE "Unable to read the value (%s: %s)"
+#define _SET_ERRORMES_READTYPE "Unable to read the type (%s: %u)"
+#define _SET_ERRORMES_READVALUE "Unable to read the value (%s: %u)"
 #define _SET_ERRORMES_DICTADD "Unable to add item to dict (%s)"
-#define _SET_ERRORMES_DUBLICATE "2 fields have been given the same name (%s: %s)"
+#define _SET_ERRORMES_DUBLICATE "2 fields have been given the same name (%s: %u)"
 #define _SET_ERRORMES_WRONGTYPE "Unknown type ID (%u)"
-#define _SET_ERRORMES_LISTELEMENT "If one element is a list, they all must be a list of the same depth (%s: %s)"
+#define _SET_ERRORMES_LISTELEMENT "If one element is a list, they all must be a list of the same depth (%s: %u)"
 #define _SET_ERRORMES_NOELEMENTS "A list must have at least one element"
-#define _SET_ERRORMES_TYPEELEMENT "If one element is either a char, string or struct all other elements must be too (%s: %s)"
-#define _SET_ERRORMES_NUMBERELEMENT "If one element is a number all other elements must be too (%s: %s)"
+#define _SET_ERRORMES_TYPEELEMENT "If one element is either a char, string or struct all other elements must be too (%s: %u)"
+#define _SET_ERRORMES_NUMBERELEMENT "If one element is a number all other elements must be too (%s: %u)"
 #define _SET_ERRORMES_DEPTHMATCH "List did not have expected depth (Expected: %u, received: %u)"
 #define _SET_ERRORMES_TYPEMATCH "Value did not have expected type (Expected: %u, received: %u)"
 #define _SET_ERRORMES_FLOATMATCH "Unable to convert a float into an int"
@@ -377,6 +377,7 @@ SET_Data _SET_ConvertString(const char *String);
 char _SET_ConvertSpecialChar(char Char);
 
 // Loads a settings file
+// The output should be destroyed with SET_DestroyDataStruct not DIC_DestroyDict
 DIC_Dict *SET_LoadSettings(const char *FileName);
 
 // Initialize structs
@@ -445,7 +446,7 @@ DIC_Dict *SET_LoadSettings(const char *FileName)
 
     size_t ElementSize = sizeof(SET_DataType);
 
-    if (!DIC_AddList(_SET_TypeDict, _SET_TypeNames, _SET_TYPECOUNT, (void *)_SET_Types, &ElementSize, DIC_MODE_LIST))
+    if (!DIC_AddList(_SET_TypeDict, (const char **)_SET_TypeNames, _SET_TYPECOUNT, (void *)_SET_Types, &ElementSize, DIC_MODE_LIST))
     {
         _SET_AddErrorForeign(_SET_ERRORID_LOADSETTINGS_LOADDICT, DIC_GetError(), _SET_ERRORMES_DICTLIST);
         DIC_DestroyDict(_SET_TypeDict);
@@ -502,7 +503,7 @@ char *_SET_CleanString(const char *String)
     char *SpecialCharList = NULL;
     char *EndSpecialCharList = _SET_SpecialChar + _SET_SpecialCharLength;
 
-    for (char *Current = String; *Current != '\0'; ++Current)
+    for (const char *Current = String; *Current != '\0'; ++Current)
     {
         // Skip if in line comment
         if (LineComment)
@@ -1175,7 +1176,7 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
             // Check binary
             if (Bin)
             {
-                if (*Current != '0' || *Current != '1')
+                if (*Current != '0' && *Current != '1')
                 {
                     _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_ILLIGALBIN, _SET_ERRORMES_ILLIGALBIN, Value, *Current);
                     return SET_DATATYPEBASE_NONE;
@@ -1298,7 +1299,7 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
         _SET_AddErrorForeign(_SET_ERRORID_CONVERTSTRUCT_CREATEDICT, DIC_GetError(), _SET_ERRORMES_CREATEDICT);
         return NULL;
     }
-
+    
     // Start filling it up
     SET_CodeName **Names = Struct->names;
     SET_CodeName **EndNames = Names + Struct->count;
@@ -1313,7 +1314,7 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
             SET_DestroyDataStruct(Dict);
             return NULL;
         }
-
+        
         // Get the type
         SET_DataType Type = SET_DATATYPE_NONE;
 
@@ -1328,7 +1329,7 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
                 return NULL;
             }
         }
-
+        
         // Read the value
         SET_Data *Value = _SET_ConvertValue(*Values, Type, (*Names)->pointer);
 
@@ -1338,7 +1339,7 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
             SET_DestroyDataStruct(Dict);
             return NULL;
         }
-
+        
         // Add to dict
         if (!DIC_AddItem(Dict, (*Names)->name, (void *)Value, 0, DIC_MODE_POINTER))
         {
@@ -1348,7 +1349,7 @@ DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
             return NULL;
         }
     }
-
+    
     return Dict;
 }
 
@@ -1359,7 +1360,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
         _SET_SetError(_SET_ERRORID_CONVERTLIST_NOELEMENTS, _SET_ERRORMES_NOELEMENTS);
         return NULL;
     }
-
+    
     // Allocate memory
     SET_DataList *ListObject = (SET_DataList *)malloc(sizeof(SET_DataList));
 
@@ -1368,7 +1369,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
         _SET_AddErrorForeign(_SET_ERRORID_CONVERTLIST_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_DataList));
         return NULL;
     }
-
+    
     SET_InitDataList(ListObject);
     
     // Add in the list
@@ -1380,12 +1381,12 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
         SET_DestroyDataList(ListObject);
         return NULL;
     }
-
+    
     for (SET_Data **Elements = ListObject->list, **EndElements = ListObject->list + List->count; Elements < EndElements; ++Elements)
         *Elements = NULL;
 
     ListObject->count = List->count;
-
+    
     // Go through each element in the list and convert them
     SET_Data **DataList = ListObject->list;
 
@@ -1401,7 +1402,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
             return NULL;
         }
     }
-
+    
     // Find the common type
     SET_DataType CommonType = (*ListObject->list)->type;
     uint8_t CommonDepth = 0;
@@ -1447,13 +1448,13 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
         else if ((*ValueList)->type >= SET_DATATYPE_INT8 && (*ValueList)->type <= SET_DATATYPE_FLOAT)
         {
             // Make sure it is supposed to be a number
-            if (!(CommonType >= SET_DATATYPE_UINT8 && CommonType <= SET_DATATYPE_DOUBLE))
+            if (!(CommonType >= SET_DATATYPE_INT8 && CommonType <= SET_DATATYPE_DOUBLE))
             {
                 _SET_SetError(_SET_ERRORID_CONVERTLIST_NUMBERELEMENT, _SET_ERRORMES_NUMBERELEMENT, _SET_ELEMENTPREMES, ValueList - ListObject->list);
                 SET_DestroyDataList(ListObject);
                 return NULL;
             }
-
+            
             // Find out what number it must be
             // Floats
             if (CommonType == SET_DATATYPE_DOUBLE || (*ValueList)->type == SET_DATATYPE_DOUBLE)
@@ -1483,7 +1484,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
 
                 if (ValueSize > CommonSize)
                     CommonSize = ValueSize;
-
+                    
                 CommonType = SET_DATATYPE_SINT8 + CommonSize;
             }
 
@@ -1498,14 +1499,15 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
             SET_DestroyDataList(ListObject);
             return NULL;
         }
+        
     }
-
+    
     // Convert elements to the same type
     if (CommonDepth == 0 && CommonType >= SET_DATATYPE_INT8 && CommonType <= SET_DATATYPE_FLOAT)
         for (SET_Data **ValueList = ListObject->list, **EndValueList = ListObject->list + ListObject->count; ValueList < EndValueList; ++ValueList)
             if ((*ValueList)->type != CommonType)
                 **ValueList = _SET_ConvertType(*ValueList, CommonType);
-
+                
     // Finish up
     ListObject->type = CommonType;
     ListObject->depth = CommonDepth + 1;
@@ -1521,7 +1523,7 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
         _SET_SetError(_SET_ERRORID_CONVERTVALUE_NOVALUE, _SET_ERRORMES_NOVALUE2);
         return NULL;
     }
-
+    
     // Allocate memory
     SET_Data *Data = (SET_Data *)malloc(sizeof(SET_Data));
 
@@ -1530,7 +1532,7 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
         _SET_AddErrorForeign(_SET_ERRORID_CONVERTVALUE_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_Data));
         return NULL;
     }
-
+    
     SET_InitData(Data);
     SET_DataTypeBase PossibleType;
 
@@ -1541,7 +1543,7 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
         SET_DestroyData(Data);
         return NULL;
     }
-
+    
     // Find the type of value
     switch (Value->type)
     {
@@ -1638,7 +1640,7 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
         }
 
         // Check for numbers
-        else if (Type >= SET_DATATYPE_INT8 && Type <= SET_DATATYPE_FLOAT)
+        else if (Type >= SET_DATATYPE_INT && Type <= SET_DATATYPE_FLOAT)
         {
             // Convert it
             SET_Data NewData = _SET_ConvertType(Data, Type);
@@ -1661,7 +1663,7 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
             return NULL;
         }
     }
-
+    
     return Data;
 }
 
@@ -1779,8 +1781,11 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
 
     // Convert the type to a general type
     uint64_t Uint;
+    bool UseUint = false;
     int64_t Sint;
+    bool UseSint = false;
     double Float;
+    bool UseFloat = false;
 
     switch (Data->type)
     {
@@ -1793,51 +1798,88 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
         case (SET_DATATYPE_INT8):
         case (SET_DATATYPE_UINT8):
             Uint = (uint64_t)Data->data.u8;
+            UseUint = true;
             break;
 
         case (SET_DATATYPE_INT16):
         case (SET_DATATYPE_UINT16):
             Uint = (uint64_t)Data->data.u16;
+            UseUint = true;
             break;
 
         case (SET_DATATYPE_INT32):
         case (SET_DATATYPE_UINT32):
             Uint = (uint64_t)Data->data.u32;
+            UseUint = true;
             break;
 
         case (SET_DATATYPE_INT64):
         case (SET_DATATYPE_UINT64):
             Uint = (uint64_t)Data->data.u64;
+            UseUint = true;
             break;
 
         // If signed int
         case (SET_DATATYPE_SINT8):
             Sint = (int64_t)Data->data.i8;
+            UseSint = true;
             break;
 
         case (SET_DATATYPE_SINT16):
             Sint = (int64_t)Data->data.i16;
+            UseSint = true;
             break;
 
         case (SET_DATATYPE_SINT32):
             Sint = (int64_t)Data->data.i32;
+            UseSint = true;
             break;
 
         case (SET_DATATYPE_SINT64):
             Sint = (int64_t)Data->data.i64;
+            UseSint = true;
             break;
 
         // If float
         case (SET_DATATYPE_FLOAT):
             Float = (double)Data->data.f;
+            UseFloat = true;
             break;
 
         case (SET_DATATYPE_DOUBLE):
             Float = (double)Data->data.d;
+            UseFloat = true;
             break;
 
         default:
             break;
+    }
+
+    if (Type >= SET_DATATYPE_DOUBLE)
+    {
+        if (UseUint)
+            Float = (double)Uint;
+
+        else if (UseSint)
+            Float = (double)Sint;
+    }
+
+    else if (Type >= SET_DATATYPE_SINT8)
+    {
+        if (UseUint)
+            Sint = (int64_t)Uint;
+
+        else if (UseFloat)
+            Sint = (int64_t)Float;
+    }
+
+    else
+    {
+        if (UseSint)
+            Uint = (uint64_t)Sint;
+
+        else if (UseFloat)
+            Uint = (uint64_t)Float;
     }
 
     // Convert to the correct type
@@ -2163,7 +2205,7 @@ SET_Data _SET_ConvertFloat(const char *String)
     Value.data.d = 0.;
     Value.type = SET_DATATYPE_NONE;
 
-    for (NewString = String + Negative; *NewString != '\0' || *NewString != '.' || *NewString != 'e' || *NewString != 'E'; ++NewString)
+    for (NewString = String + Negative; *NewString != '\0' && *NewString != '.' && *NewString != 'e' && *NewString != 'E'; ++NewString)
         Value.data.d = Value.data.d * 10. + (double)(*NewString - '0');
 
     // Add after .
@@ -2171,7 +2213,7 @@ SET_Data _SET_ConvertFloat(const char *String)
     {
         ++NewString;
 
-        for (double Size = 0.1; *NewString != '\0' || *NewString != 'e' || *NewString != 'E'; ++NewString, Size /= 10.)
+        for (double Size = 0.1; *NewString != '\0' && *NewString != 'e' && *NewString != 'E'; ++NewString, Size /= 10.)
             Value.data.d += (double)(*NewString - '0') * Size;
     }
 
