@@ -2217,6 +2217,9 @@ SET_Data _SET_ConvertFloat(const char *String)
             Value.data.d += (double)(*NewString - '0') * Size;
     }
 
+    if (Negative)
+        Value.data.d *= -1.;
+
     // Add exponentiation
     if (*NewString == 'e' || *NewString == 'E')
     {
