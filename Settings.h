@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <Dictionary.h>
+#include <math.h>
 
 #define ERR_PREFIX SET
 #include <Error.h>
@@ -35,6 +36,14 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTVALUE_MALLOC = 0x300050200,
     _SET_ERRORID_CONVERTVALUE_LIST = 0x300050201,
     _SET_ERRORID_CONVERTVALUE_STRUCT = 0x300050202,
+    _SET_ERRORID_CONVERTVALUE_LISTMATCH = 0x300050203,
+    _SET_ERRORID_CONVERTVALUE_TYPEMATCH = 0x300050204,
+    _SET_ERRORID_CONVERTVALUE_LISTMATCH2 = 0x300050205,
+    _SET_ERRORID_CONVERTVALUE_NUMBERMATCH = 0x300050206,
+    _SET_ERRORID_CONVERTVALUE_TYPE = 0x300050207,
+    _SET_ERRORID_CONVERTVALUE_NOVALUE = 0x300050208,
+    _SET_ERRORID_CONVERTVALUE_NOPOSSIBLEVALUE = 0x300050209,
+    _SET_ERRORID_CONVERTVALUE_CONVERT = 0x30005020A,
     _SET_ERRORID_READTYPE_DICT = 0x300060200,
     _SET_ERRORID_READTYPE_WRONGTYPE = 0x300060201,
     _SET_ERRORID_READTYPE_RETRIEVE = 0x300060202,
@@ -59,6 +68,8 @@ enum _SET_ErrorID {
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALHEX = 0x3000A0105,
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALDOT = 0x3000A0106,
     _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALNUM = 0x3000A0107,
+    _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALEXP = 0x3000A0108,
+    _SET_ERRORID_GETPOSSIBLETYPE_ILLIGALDOT2 = 0x3000A0109,
     _SET_ERRORID_CONVERTSTRUCT_CREATEDICT = 0x3000B0200,
     _SET_ERRORID_CONVERTSTRUCT_TYPE = 0x3000B0201,
     _SET_ERRORID_CONVERTSTRUCT_VALUE = 0x3000B0202,
@@ -73,14 +84,6 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTLIST_LISTELEMENT2 = 0x3000C0206,
     _SET_ERRORID_CONVERTLIST_TYPEELEMENT = 0x3000C0207,
     _SET_ERRORID_CONVERTLIST_NUMBERELEMENT = 0x3000C0208,
-    _SET_ERRORID_CONVERTLIST_DEPTHMATCH = 0x3000C0209,
-    _SET_ERRORID_CONVERTLIST_TYPEMATCH = 0x3000C020A,
-    _SET_ERRORID_CONVERTLIST_TYPEMATCH2 = 0x3000C020B,
-    _SET_ERRORID_CONVERTLIST_FLOATMATCH = 0x3000C020C,
-    _SET_ERRORID_CONVERTLIST_SINTMATCH = 0x3000C020D,
-    _SET_ERRORID_CONVERTLIST_SINTMATCH2 = 0x3000C020E,
-    _SET_ERRORID_CONVERTLIST_INTMATCH = 0x3000C020F,
-    _SET_ERRORID_CONVERTLIST_NUMBERMATCH = 0x3000C0210,
     _SET_ERRORID_CONVERTTYPE_NOSTRUCT = 0x3000D0200,
     _SET_ERRORID_CONVERTTYPE_TYPEMATCH = 0x3000D0201,
     _SET_ERRORID_CONVERTTYPE_TYPEMATCH2 = 0x3000D0202,
@@ -88,7 +91,24 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTTYPE_FLOATMATCH = 0x3000D0204,
     _SET_ERRORID_CONVERTTYPE_SINTMATCH = 0x3000D0205,
     _SET_ERRORID_CONVERTTYPE_SINTMATCH2 = 0x3000D0206,
-    _SET_ERRORID_CONVERTTYPE_INTMATCH = 0x3000D0207
+    _SET_ERRORID_CONVERTTYPE_INTMATCH = 0x3000D0207,
+    _SET_ERRORID_CONVERTUINT_CONVERT = 0x3000E0200,
+    _SET_ERRORID_READUINT_HIGH = 0x3000F0200,
+    _SET_ERRORID_READUINT_HIGH2 = 0x3000F0201,
+    _SET_ERRORID_READUINT_NOSTRING = 0x3000F0202,
+    _SET_ERRORID_READHEX_HIGH = 0x300100200,
+    _SET_ERRORID_READHEX_NOSTRING = 0x300100201,
+    _SET_ERRORID_READBIN_HIGH = 0x300110200,
+    _SET_ERRORID_READBIN_NOSTRING = 0x300110201,
+    _SET_ERRORID_CONVERTSINT_READ = 0x300120200,
+    _SET_ERRORID_CONVERTFLOAT_EXP = 0x300130200,
+    _SET_ERRORID_CONVERTFLOAT_FINITE = 0x300130201,
+    _SET_ERRORID_READSINT_UINT = 0x300140200,
+    _SET_ERRORID_READSINT_HIGH = 0x300140201,
+    _SET_ERRORID_CONVERTSPECIALCHAR_UNKNOWN = 0x300150200,
+    _SET_ERRORID_CONVERTCHAR_SPECIAL = 0x300160200,
+    _SET_ERRORID_CONVERTSTRING_MALLOC = 0x300170200,
+    _SET_ERRORID_CONVERTSTRING_SPECIAL = 0x300170201
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -116,6 +136,8 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_ILLIGALHEX "Found illigal char in definition of hexadecimal number, must be 0-9, a-f or A-F (%s: %c)"
 #define _SET_ERRORMES_ILLIGALNUM "Found illigal char in definition of number, must be 0-9 (%s: %c)"
 #define _SET_ERRORMES_ILLIGALDOT "Found two dots in definition of floating point number (%s)"
+#define _SET_ERRORMES_ILLIGALDOT2 "Dound a dot in definition of the potentiation of a floating point number (%s)"
+#define _SET_ERRORMES_ILLIGALEXP "Found to potentiations in definition of floating point number (%s)"
 #define _SET_ERRORMES_CREATEDICT "Unable to create a dictionary"
 #define _SET_ERRORMES_CONVERTLIST "Unable to convert list"
 #define _SET_ERRORMES_CONVERTSTRUCT "Unable to convert struct"
@@ -139,6 +161,18 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_INTMATCH "Unable to convert an unsigned integer into a smaller unsigned integer (Goal: %u, received: %u)"
 #define _SET_ERRORMES_NOSTRUCT "Structs and lists cannot be converted"
 #define _SET_ERRORMES_NUMBERMATCH "Cannot convert a non-number into a number (Received: %u)"
+#define _SET_ERRORMES_LISTMATCH "Found list but expected a different type (Expected: %u)"
+#define _SET_ERRORMES_LISTMATCH2 "Expected a list but found a different type (Received: %u)"
+#define _SET_ERRORMES_NUMBERCONVERT "Unable to convert number"
+#define _SET_ERRORMES_HIGHNUMBER "The number is too large (Max: %lu, received: %s)"
+#define _SET_ERRORMES_HIGHHEX "The number is too large (Max: %lX, received: %s)"
+#define _SET_ERRORMES_HIGHNUMBERSIGNED "The number is too %s (%s: %li, received: %s)"
+#define _SET_ERRORMES_CONVERTEXP "Unable to convert exponentiation (%s)"
+#define _SET_ERRORMES_FINITE "Floating point number is not finite (%s)"
+#define _SET_ERRORMES_UNKNOWNSPECIAL "Unknown special character (\\%c)"
+#define _SET_ERRORMES_CONVERTSPECIALCHAR "Unable to convert special char (%s)"
+#define _SET_ERRORMES_NOPOSSIBLEVALUE "The value cannot be any type"
+#define _SET_ERRORMES_CONVERTVALUE "Unable to convert value"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -201,7 +235,7 @@ union ___SET_Data {
     int64_t i64;
     float f;
     double d;
-    char ch;
+    char c;
     char *str;
     DIC_Dict *stct;
     SET_DataList *list;
@@ -259,6 +293,16 @@ DIC_Dict *_SET_TypeDict = NULL;
 #define _SET_LINEPREMES "Line"
 #define _SET_ELEMENTPREMES "Element"
 
+// Highest numbers
+#define _SET_HIGH_UINT8 0xFF
+#define _SET_HIGH_UINT16 0xFFFF
+#define _SET_HIGH_UINT32 0xFFFFFFFF
+#define _SET_HIGH_UINT64 0xFFFFFFFFFFFFFFFF
+#define _SET_HIGH_INT8 0x7F
+#define _SET_HIGH_INT16 0x7FFF
+#define _SET_HIGH_INT32 0x7FFFFFFF
+#define _SET_HIGH_INT64 0x7FFFFFFFFFFFFFFF
+
 // Removes newlines, tabs and leading/trailing spaces
 char *_SET_CleanString(char *String);
 
@@ -288,6 +332,36 @@ SET_DataType _SET_ReadType(const char *Type);
 
 // Converts data to a specific type, does not convert lists or structs
 SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type);
+
+// Converts a string to an unsigned int
+SET_Data _SET_ConvertUint(const char *String);
+
+// Converts a string to an unsigned int 64 from standard form
+SET_Data _SET_ReadUint(const char *String);
+
+// Converts a string to an unsigned int 64 from hex form
+SET_Data _SET_ReadHex(const char *String);
+
+// Converts a string to an unsigned int 64 from bin form
+SET_Data _SET_ReadBin(const char *String);
+
+// Converts a string to a signed int
+SET_Data _SET_ConvertSint(const char *String);
+
+// Converts a string to a signed int 64
+SET_Data _SET_ReadSint(const char *String);
+
+// Converts a string to a float
+SET_Data _SET_ConvertFloat(const char *String);
+
+// Converts a string to a char
+SET_Data _SET_ConvertChar(const char *String);
+
+// Converts a string to another string
+SET_Data _SET_ConvertString(const char *String);
+
+// Reads a special character
+char _SET_ConvertSpecialChar(char Char);
 
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
@@ -945,6 +1019,7 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
     bool Hex = false;
     bool Bin = false;
     bool Dot = false;
+    bool Exp = false;
 
     // Do the start
     switch (*Current)
@@ -1029,9 +1104,33 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
                         Type = SET_DATATYPEBASE_FLOAT;
                     }
 
+                    else if (Exp)
+                    {
+                        _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_ILLIGALDOT2, _SET_ERRORMES_ILLIGALDOT2, Value);
+                        return SET_DATATYPEBASE_NONE;
+                    }
+
                     else
                     {
                         _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_ILLIGALDOT, _SET_ERRORMES_ILLIGALDOT, Value);
+                        return SET_DATATYPEBASE_NONE;
+                    }
+                }
+
+                else if ((*Current == 'e' || *Current == 'E') && Type & SET_DATATYPEBASE_FLOAT)
+                {
+                    if (!Exp)
+                    {
+                        Exp = true;
+                        Type = SET_DATATYPEBASE_FLOAT;
+
+                        if (*(Current + 1) == '-')
+                            ++Current;
+                    }
+
+                    else
+                    {
+                        _SET_SetError(_SET_ERRORID_GETPOSSIBLETYPE_ILLIGALEXP, _SET_ERRORMES_ILLIGALEXP, Value);
                         return SET_DATATYPEBASE_NONE;
                     }
                 }
@@ -1196,7 +1295,7 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
     for (SET_CodeValue **ValueList = List->list, **EndValueList = List->list + List->count; ValueList < EndValueList; ++ValueList, ++DataList)
     {
         // Convert value
-        *DataList = _SET_ConvertValue(*ValueList, Type, Depth - 1);
+        *DataList = _SET_ConvertValue(*ValueList, Type, Depth);
 
         if (*DataList == NULL)
         {
@@ -1304,92 +1403,6 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
         }
     }
 
-    // Make sure the type is legal
-    if (Type != SET_DATATYPE_NONE)
-    {
-        // Make sure the list is correct
-        if (CommonDepth != Depth)
-        {
-            _SET_SetError(_SET_ERRORID_CONVERTLIST_DEPTHMATCH, _SET_ERRORMES_DEPTHMATCH, Depth, CommonDepth);
-            SET_DestroyDataList(ListObject);
-            return NULL;
-        }
-
-        // Make sure the type is correct
-        if (Type >= SET_DATATYPE_CHAR && Type <= SET_DATATYPE_STRUCT)
-        {
-            if (Type != CommonType)
-            {
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPEMATCH, _SET_ERRORMES_TYPEMATCH, Type, CommonType);
-                SET_DestroyDataList(ListObject);
-                return NULL;
-            }
-        }
-
-        // Make sure the int match up
-        else if (Type >= SET_DATATYPE_INT8 && Type <= SET_DATATYPE_FLOAT)
-        {
-            if (!(CommonType >= SET_DATATYPE_INT8 && CommonType <= SET_DATATYPE_FLOAT))
-            {
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_NUMBERMATCH, _SET_ERRORMES_NUMBERMATCH, CommonType);
-                SET_DestroyDataList(ListObject);
-                return NULL;
-            }
-
-            else if (Type >= SET_DATATYPE_DOUBLE)
-                ;
-
-            else if (CommonType >= SET_DATATYPE_DOUBLE)
-            {
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_FLOATMATCH, _SET_ERRORMES_FLOATMATCH);
-                SET_DestroyDataList(ListObject);
-                return NULL;
-            }
-
-            else if (Type >= SET_DATATYPE_SINT8)
-            {
-                uint8_t CommonSize;
-
-                if (CommonType >= SET_DATATYPE_SINT8)
-                    CommonSize = CommonType - SET_DATATYPE_SINT8;
-
-                else
-                    CommonSize = (CommonType - SET_DATATYPE_INT8 + 1) / 2;
-
-                if (CommonSize > Type - SET_DATATYPE_SINT8)
-                {
-                    _SET_SetError(_SET_ERRORID_CONVERTLIST_SINTMATCH, _SET_ERRORMES_SINTMATCH, Type, CommonType);
-                    SET_DestroyDataList(ListObject);
-                    return NULL;
-                }
-            }
-
-            else if (CommonType >= SET_DATATYPE_SINT8)
-            {
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_SINTMATCH2, _SET_ERRORMES_SINTMATCH2, Type, CommonType);
-                SET_DestroyDataList(ListObject);
-                return NULL;
-            }
-
-            else if (CommonType > Type)
-            {
-                _SET_SetError(_SET_ERRORID_CONVERTLIST_INTMATCH, _SET_ERRORMES_INTMATCH, Type, CommonType);
-                SET_DestroyDataList(ListObject);
-                return NULL;
-            }
-        }
-
-        else
-        {
-            _SET_SetError(_SET_ERRORID_CONVERTLIST_TYPEMATCH2, _SET_ERRORMES_TYPEMATCH, Type, CommonType);
-            SET_DestroyDataList(ListObject);
-            return NULL;
-        }
-
-        // Set type
-        CommonType = Type;
-    }
-
     // Convert elements to the same type
     if (CommonDepth == 0 && CommonType >= SET_DATATYPE_INT8 && CommonType <= SET_DATATYPE_FLOAT)
         for (SET_Data **ValueList = ListObject->list, **EndValueList = ListObject->list + ListObject->count; ValueList < EndValueList; ++ValueList)
@@ -1405,6 +1418,13 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
 
 SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8_t Depth)
 {
+    // Check that there is a value
+    if (Value->value.value == NULL)
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTVALUE_NOVALUE, _SET_ERRORMES_NOVALUE2);
+        return NULL;
+    }
+
     // Allocate memory
     SET_Data *Data = (SET_Data *)malloc(sizeof(SET_Data));
 
@@ -1416,12 +1436,27 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
 
     SET_InitData(Data);
     SET_DataTypeBase PossibleType;
-    SET_DataType GivenType;
+
+    // Make sure it is a list if needed
+    if (Type != SET_DATATYPE_NONE && Depth > 0 && Value->type != SET_VALUETYPE_LIST)
+    {
+        _SET_AddError(_SET_ERRORID_CONVERTVALUE_LISTMATCH2, _SET_ERRORMES_LISTMATCH2, Value->type);
+        SET_DestroyData(Data);
+        return NULL;
+    }
 
     // Find the type of value
     switch (Value->type)
     {
         case (SET_VALUETYPE_LIST):
+            // Make sure it is supposed to be a list
+            if (Type != SET_DATATYPE_NONE && Depth == 0)
+            {
+                _SET_AddError(_SET_ERRORID_CONVERTVALUE_LISTMATCH, _SET_ERRORMES_LISTMATCH, Type);
+                SET_DestroyData(Data);
+                return NULL;
+            }
+
             // Get the data
             Data->data.list = _SET_ConvertList(Value->value.list, Type, Depth - 1);
 
@@ -1455,17 +1490,82 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
             // Figure out what type it is
             PossibleType = _SET_GetPossibleType(Value->value.value);
 
-            // Read the type if defined
-            GivenType = SET_DATATYPE_NONE;
+            // Convert
+            if (PossibleType & SET_DATATYPEBASE_CHAR)
+                *Data = _SET_ConvertChar(Value->value.value);
 
-            if (Value->value.value != NULL)
-                GivenType = _SET_ReadType(Value->value.value);
+            else if (PossibleType & SET_DATATYPEBASE_STRING)
+                *Data = _SET_ConvertString(Value->value.value);
+
+            else if (PossibleType & SET_DATATYPEBASE_UINT)
+                *Data = _SET_ConvertUint(Value->value.value);
+
+            else if (PossibleType & SET_DATATYPEBASE_SINT)
+                *Data = _SET_ConvertSint(Value->value.value);
+
+            else if (PossibleType & SET_DATATYPEBASE_FLOAT)
+                *Data = _SET_ConvertFloat(Value->value.value);
+
+            else
+            {
+                _SET_AddError(_SET_ERRORID_CONVERTVALUE_NOPOSSIBLEVALUE, _SET_ERRORMES_NOPOSSIBLEVALUE);
+                SET_DestroyData(Data);
+                return NULL;
+            }
+
+            if (Data->type == SET_DATATYPE_NONE)
+            {
+                _SET_AddError(_SET_ERRORID_CONVERTVALUE_CONVERT, _SET_ERRORMES_CONVERTVALUE);
+                SET_DestroyData(Data);
+                return NULL;
+            }
 
             break;
 
         default:
             break;
     }
+
+    // Make sure the type is correct
+    if (Type != SET_DATATYPE_NONE && Data->type != SET_DATATYPE_LIST)
+    {
+        // Check for special types
+        if (Type >= SET_DATATYPE_CHAR && Type <= SET_DATATYPE_STRUCT)
+        {
+            if (Data->type != Type)
+            {
+                _SET_SetError(_SET_ERRORID_CONVERTVALUE_TYPEMATCH, _SET_ERRORMES_TYPEMATCH, Type, Data->type);
+                SET_DestroyData(Data);
+                return NULL;
+            }
+        }
+
+        // Check for numbers
+        else if (Type >= SET_DATATYPE_INT8 && Type <= SET_DATATYPE_FLOAT)
+        {
+            // Convert it
+            SET_Data NewData = _SET_ConvertType(Data, Type);
+
+            if (NewData.type == SET_DATATYPE_NONE)
+            {
+                _SET_AddError(_SET_ERRORID_CONVERTVALUE_NUMBERMATCH, _SET_ERRORMES_NUMBERCONVERT);
+                SET_DestroyData(Data);
+                return NULL;
+            }
+
+            if (Data->type != NewData.type)
+                *Data = NewData;
+        }
+
+        else
+        {
+            _SET_SetError(_SET_ERRORID_CONVERTVALUE_TYPE, _SET_ERRORMES_WRONGTYPE, Type);
+            SET_DestroyData(Data);
+            return NULL;
+        }
+    }
+
+    return Data;
 }
 
 SET_DataType _SET_ReadType(const char *Type)
@@ -1522,7 +1622,7 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
     }
 
     // Make sure the number match up
-    else if (Type >= SET_DATATYPE_INT8 && Type <= SET_DATATYPE_FLOAT)
+    else if (Type >= SET_DATATYPE_INT && Type <= SET_DATATYPE_FLOAT)
     {
         if (!(Data->type >= SET_DATATYPE_INT8 && Data->type <= SET_DATATYPE_FLOAT))
         {
@@ -1538,6 +1638,9 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
             _SET_SetError(_SET_ERRORID_CONVERTTYPE_FLOATMATCH, _SET_ERRORMES_FLOATMATCH);
             return NewData;
         }
+
+        else if (Type == SET_DATATYPE_INT)
+            return *Data;
 
         else if (Type >= SET_DATATYPE_SINT8)
         {
@@ -1695,6 +1798,415 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
     }
 
     return NewData;
+}
+
+SET_Data _SET_ConvertUint(const char *String)
+{
+    SET_Data Value;
+    SET_InitData(&Value);
+
+    // Get the length
+    size_t Length = strlen(String);
+
+    // Convert number
+    if (Length >= 2 && String[1] == 'x')
+        Value = _SET_ReadHex(String + 2);
+
+    else if (Length >= 2 && String[1] == 'b')
+        Value = _SET_ReadBin(String + 2);
+
+    else
+        Value = _SET_ReadUint(String);
+
+    if (Value.type == SET_DATATYPE_NONE)
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTUINT_CONVERT, _SET_ERRORMES_NUMBERCONVERT);
+        return Value;
+    }
+
+    // Convert it to the lowest possible type
+    if (Value.data.u64 <= _SET_HIGH_INT8)
+    {
+        Value.data.u8 = (uint8_t)Value.data.u64;
+        Value.type = SET_DATATYPE_INT8;
+    }
+
+    else if (Value.data.u64 <= _SET_HIGH_UINT8)
+    {
+        Value.data.u8 = (uint8_t)Value.data.u64;
+        Value.type = SET_DATATYPE_UINT8;
+    }
+
+    else if (Value.data.u64 <= _SET_HIGH_INT16)
+    {
+        Value.data.u16 = (uint16_t)Value.data.u64;
+        Value.type = SET_DATATYPE_INT16;
+    }
+
+    else if (Value.data.u64 <= _SET_HIGH_UINT16)
+    {
+        Value.data.u16 = (uint16_t)Value.data.u64;
+        Value.type = SET_DATATYPE_UINT16;
+    }
+
+    else if (Value.data.u64 <= _SET_HIGH_INT32)
+    {
+        Value.data.u32 = (uint32_t)Value.data.u64;
+        Value.type = SET_DATATYPE_INT32;
+    }
+
+    else if (Value.data.u64 <= _SET_HIGH_UINT32)
+    {
+        Value.data.u32 = (uint32_t)Value.data.u64;
+        Value.type = SET_DATATYPE_UINT32;
+    }
+
+    else if (Value.data.u64 <= _SET_HIGH_INT64)
+        Value.type = SET_DATATYPE_INT64;
+
+    return Value;
+}
+
+SET_Data _SET_ReadUint(const char *String)
+{
+    SET_Data Value;
+    Value.type = SET_DATATYPE_NONE;
+    Value.data.u64 = 0;
+
+    // Get the length
+    if (strlen(String) == 0)
+    {
+        _SET_AddError(_SET_ERRORID_READUINT_NOSTRING, _SET_ERRORMES_NOVALUE2);
+        return Value;
+    }
+
+    // Remove leading 0
+    for (; *String == '0'; ++String)
+        ;
+
+    // Start reading
+    for (const char *NewString = String; *NewString != '\0'; ++NewString)
+    {
+        if (Value.data.u64 > _SET_HIGH_UINT64 / 10)
+        {
+            _SET_SetError(_SET_ERRORID_READUINT_HIGH, _SET_ERRORMES_HIGHNUMBER, _SET_HIGH_UINT64, String);
+            return Value;
+        }
+
+        uint64_t NewInt = Value.data.u64 * 10 + *NewString - '0';
+
+        if (NewInt < Value.data.u64)
+        {
+            _SET_SetError(_SET_ERRORID_READUINT_HIGH2, _SET_ERRORMES_HIGHNUMBER, _SET_HIGH_UINT64, String);
+            return Value;
+        }
+
+        Value.data.u64 = NewInt;
+    }
+
+    Value.type = SET_DATATYPE_UINT64;
+    return Value;
+}
+
+SET_Data _SET_ReadHex(const char *String)
+{
+    SET_Data Value;
+    Value.type = SET_DATATYPE_NONE;
+    Value.data.u64 = 0;
+
+    // Get the length
+    if (strlen(String) == 0)
+    {
+        _SET_AddError(_SET_ERRORID_READHEX_NOSTRING, _SET_ERRORMES_NOVALUE2);
+        return Value;
+    }
+
+    // Remove leading 0
+    for (; *String == '0'; ++String)
+        ;
+
+    // Make sure it is not too large
+    if (strlen(String) > sizeof(uint64_t) * 2)
+    {
+        _SET_SetError(_SET_ERRORID_READHEX_HIGH, _SET_ERRORMES_HIGHHEX, _SET_HIGH_UINT64, String);
+        return Value;
+    }
+
+    // Read
+    for (const char *NewString = String; *NewString != '\0'; ++NewString)
+    {
+        Value.data.u64 *= 0x10;
+
+        if (*NewString >= '0' && *NewString <= '9')
+            Value.data.u64 += *NewString - '0';
+
+        else if (*NewString >= 'a' && *NewString <= 'f')
+            Value.data.u64 += *NewString - 'a' + 0xA;
+
+        else
+            Value.data.u64 += *NewString - 'A' + 0xA;
+    }
+
+    Value.type = SET_DATATYPE_UINT64;
+    return Value;
+}
+
+SET_Data _SET_ReadBin(const char *String)
+{
+    SET_Data Value;
+    Value.type = SET_DATATYPE_NONE;
+    Value.data.u64 = 0;
+
+    // Get the length
+    if (strlen(String) == 0)
+    {
+        _SET_AddError(_SET_ERRORID_READBIN_NOSTRING, _SET_ERRORMES_NOVALUE2);
+        return Value;
+    }
+
+    // Remove leading 0
+    for (; *String == '0'; ++String)
+        ;
+
+    // Make sure it is not too large
+    if (strlen(String) > sizeof(uint64_t) * 8)
+    {
+        _SET_SetError(_SET_ERRORID_READBIN_HIGH, _SET_ERRORMES_HIGHHEX, _SET_HIGH_UINT64, String);
+        return Value;
+    }
+
+    // Read
+    for (const char *NewString = String; *NewString != '\0'; ++NewString)
+        Value.data.u64 = Value.data.u64 * 2 + *NewString - '0';
+
+    Value.type = SET_DATATYPE_UINT64;
+    return Value;
+}
+
+SET_Data _SET_ReadSint(const char *String)
+{
+    bool Negative = false;
+
+    // Check if it is negative
+    if (*String == '-')
+        Negative = true;
+
+    // Read the positive part
+    SET_Data Value = _SET_ReadUint(String + Negative);
+
+    if (Value.type == SET_DATATYPE_NONE)
+    {
+        _SET_AddError(_SET_ERRORID_READSINT_UINT, _SET_ERRORMES_NUMBERCONVERT);
+        return Value;
+    }
+
+    // Make sure it is not too large
+    if (Value.data.u64 > _SET_HIGH_INT64 + ((Negative) ? (1) : (0)))
+    {
+        _SET_SetError(_SET_ERRORID_READSINT_HIGH, _SET_ERRORMES_HIGHNUMBERSIGNED, ((Negative) ? ("small") : ("large")), ((Negative) ? ("Min") : ("Max")), (_SET_HIGH_INT64 + Negative) * ((Negative) ? (-1) : (1)), String);
+        Value.type = SET_DATATYPE_NONE;
+        return Value;
+    }
+
+    // Convert to signed int
+    Value.data.i64 = (int64_t)Value.data.u64 * ((Negative) ? (-1) : (1));
+    Value.type = SET_DATATYPE_SINT64;
+}
+
+SET_Data _SET_ConvertSint(const char *String)
+{
+    // Read
+    SET_Data Value = _SET_ReadSint(String);
+
+    if (Value.type == SET_DATATYPE_NONE)
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTSINT_READ, _SET_ERRORMES_NUMBERCONVERT);
+        return Value;
+    }
+
+    // Find the correct type
+    bool Negative = ((Value.data.i64 < 0) ? (true) : (false));
+    uint64_t Pos = (uint64_t)Value.data.i64 * ((Negative) ? (-1) : (1));
+
+    if (Pos <= _SET_HIGH_INT8 + Negative)
+    {
+        Value.data.i8 = (int8_t)Value.data.i64;
+        Value.type = SET_DATATYPE_SINT8;
+    }
+
+    else if (Pos <= _SET_HIGH_INT16 + Negative)
+    {
+        Value.data.i16 = (int16_t)Value.data.i64;
+        Value.type = SET_DATATYPE_SINT16;
+    }
+
+    else if (Pos <= _SET_HIGH_INT32 + Negative)
+    {
+        Value.data.i32 = (int32_t)Value.data.i64;
+        Value.type = SET_DATATYPE_SINT32;
+    }
+
+    else
+        Value.type = SET_DATATYPE_SINT64;
+
+    return Value;
+}
+
+SET_Data _SET_ConvertFloat(const char *String)
+{
+    bool Negative = false;
+
+    // Check if it is negative
+    if (*String == '-')
+        Negative = true;
+
+    // Read number
+    const char *NewString;
+    SET_Data Value;
+    Value.data.d = 0.;
+    Value.type = SET_DATATYPE_NONE;
+
+    for (NewString = String + Negative; *NewString != '\0' || *NewString != '.' || *NewString != 'e' || *NewString != 'E'; ++NewString)
+        Value.data.d = Value.data.d * 10. + (double)(*NewString - '0');
+
+    // Add after .
+    if (*NewString == '.')
+    {
+        ++NewString;
+
+        for (double Size = 0.1; *NewString != '\0' || *NewString != 'e' || *NewString != 'E'; ++NewString, Size /= 10.)
+            Value.data.d += (double)(*NewString - '0') * Size;
+    }
+
+    // Add exponentiation
+    if (*NewString == 'e' || *NewString == 'E')
+    {
+        // Convert int
+        SET_Data Exp = _SET_ReadSint(NewString + 1);
+
+        if (Exp.type == SET_DATATYPE_NONE)
+        {
+            _SET_AddError(_SET_ERRORID_CONVERTFLOAT_EXP, _SET_ERRORMES_CONVERTEXP, String);
+            return Value;
+        }
+
+        // Change the value
+        Value.data.d *= pow(10., (double)Exp.data.i64);
+    }
+
+    // Check if it is finite
+    if (!isfinite(Value.data.d))
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTFLOAT_FINITE, _SET_ERRORMES_FINITE, String);
+        return Value;
+    }
+
+    Value.type = SET_DATATYPE_DOUBLE;
+    return Value;
+}
+
+char _SET_ConvertSpecialChar(char Char)
+{
+    // Figure out what it is
+    switch (Char)
+    {
+        case ('n'):
+            return '\n';
+
+        case ('t'):
+            return '\t';
+
+        case ('s'):
+            return '\0';
+
+        case ('\''):
+            return '\'';
+
+        case ('\"'):
+            return '\"';
+
+        case ('\\'):
+            return '\\';
+        
+        default:
+            _SET_SetError(_SET_ERRORID_CONVERTSPECIALCHAR_UNKNOWN, _SET_ERRORMES_UNKNOWNSPECIAL, Char);
+            return EOF;
+    }
+}
+
+SET_Data _SET_ConvertChar(const char *String)
+{
+    SET_Data Value;
+    SET_InitData(&Value);
+
+    // Check if it needs a special char
+    if (String[1] == '\\')
+    {
+        char Char = _SET_ConvertSpecialChar(String[2]);
+
+        if (Char == EOF || Char == '\0')
+        {
+            _SET_AddError(_SET_ERRORID_CONVERTCHAR_SPECIAL, _SET_ERRORMES_CONVERTSPECIALCHAR, String);
+            return Value;
+        }
+
+        Value.data.c = Char;
+    }
+
+    else
+        Value.data.c = String[1];
+
+    Value.type = SET_DATATYPE_CHAR;
+    return Value;
+}
+
+SET_Data _SET_ConvertString(const char *String)
+{
+    SET_Data Value;
+    SET_InitData(&Value);
+
+    // Allocate memory
+    size_t Length = strlen(String) - 2;
+
+    char *NewString = (char *)malloc(sizeof(char) * (Length + 1));
+
+    if (NewString == NULL)
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTSTRING_MALLOC, _SET_ERRORMES_MALLOC, sizeof(char) * (Length + 1));
+        return Value;
+    }
+
+    // Go through and copy
+    char *Dst = NewString;
+    for (const char *Src = String + 1; *Src != '\"'; ++Src, ++Dst)
+    {
+        // If it is a special char
+        if (*Src == '\\')
+        {
+            char NewChar = _SET_ConvertSpecialChar(*(++Src));
+
+            if (NewChar == EOF)
+            {
+                _SET_AddError(_SET_ERRORID_CONVERTSTRING_SPECIAL, _SET_ERRORMES_CONVERTSPECIALCHAR, String);
+                free(NewString);
+                return Value;
+            }
+
+            else if (NewChar != '\0')
+                *Dst = NewChar;
+
+            else
+                --Dst;
+        }
+
+        else
+            *Dst = *Src;
+    }
+
+    *(Dst++) = '\0';
+    Value.data.str = (char *)realloc(NewString, sizeof(char) * (Dst - NewString));
+    Value.type = SET_DATATYPE_STR;
+    return Value;
 }
 
 void SET_InitData(SET_Data *Struct)
