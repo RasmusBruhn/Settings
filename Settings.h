@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <Dictionary.h>
 #include <math.h>
+#include <Files.h>
 
 #define ERR_PREFIX SET
 #include <Error.h>
@@ -108,7 +109,13 @@ enum _SET_ErrorID {
     _SET_ERRORID_CONVERTSPECIALCHAR_UNKNOWN = 0x300150200,
     _SET_ERRORID_CONVERTCHAR_SPECIAL = 0x300160200,
     _SET_ERRORID_CONVERTSTRING_MALLOC = 0x300170200,
-    _SET_ERRORID_CONVERTSTRING_SPECIAL = 0x300170201
+    _SET_ERRORID_CONVERTSTRING_SPECIAL = 0x300170201,
+    _SET_ERRORID_LOADSETTINGS_LOAD = 0x300180200,
+    _SET_ERRORID_LOADSETTINGS_CLEAN = 0x300180201,
+    _SET_ERRORID_LOADSETTINGS_SPLIT = 0x300180202,
+    _SET_ERRORID_LOADSETTINGS_CREATEDICT = 0x300180203,
+    _SET_ERRORID_LOADSETTINGS_LOADDICT = 0x300180204,
+    _SET_ERRORID_LOADSETTINGS_CONVERT = 0x300180205
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -173,6 +180,11 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_CONVERTSPECIALCHAR "Unable to convert special char (%s)"
 #define _SET_ERRORMES_NOPOSSIBLEVALUE "The value cannot be any type"
 #define _SET_ERRORMES_CONVERTVALUE "Unable to convert value"
+#define _SET_ERRORMES_LOADFILE "Unable to load file (%s)"
+#define _SET_ERRORMES_CLEANFILE "Unable to clean file (%s)"
+#define _SET_ERRORMES_SPLITFILE "Unable to split file (%s)"
+#define _SET_ERRORMES_DICTLIST "Unable to add a list to a dict"
+#define _SET_ERRORMES_CONVERTFILE "Unable to convert file (%s)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -286,8 +298,9 @@ uint32_t _SET_SpecialCharLength = 28;
 char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<', '>', '!', '~', '|', '&', '\\', '$', '#', '@', '.', ',', '(', ')', '[', ']', '{', '}'};
 
 // Types
-char *_SET_TypeNames[] = {"int", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float", "double", "char", "str", "struct"};
-SET_DataType _SET_Types[] = {SET_DATATYPE_INT, SET_DATATYPE_UINT8, SET_DATATYPE_UINT16, SET_DATATYPE_UINT32, SET_DATATYPE_UINT64, SET_DATATYPE_SINT8, SET_DATATYPE_SINT16, SET_DATATYPE_SINT32, SET_DATATYPE_SINT64, SET_DATATYPE_FLOAT, SET_DATATYPE_DOUBLE, SET_DATATYPE_CHAR, SET_DATATYPE_STR, SET_DATATYPE_STRUCT};
+#define _SET_TYPECOUNT 14
+char *_SET_TypeNames[_SET_TYPECOUNT] = {"int", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float", "double", "char", "str", "struct"};
+SET_DataType _SET_Types[_SET_TYPECOUNT] = {SET_DATATYPE_INT, SET_DATATYPE_UINT8, SET_DATATYPE_UINT16, SET_DATATYPE_UINT32, SET_DATATYPE_UINT64, SET_DATATYPE_SINT8, SET_DATATYPE_SINT16, SET_DATATYPE_SINT32, SET_DATATYPE_SINT64, SET_DATATYPE_FLOAT, SET_DATATYPE_DOUBLE, SET_DATATYPE_CHAR, SET_DATATYPE_STR, SET_DATATYPE_STRUCT};
 DIC_Dict *_SET_TypeDict = NULL;
 
 #define _SET_LINEPREMES "Line"
@@ -304,7 +317,7 @@ DIC_Dict *_SET_TypeDict = NULL;
 #define _SET_HIGH_INT64 0x7FFFFFFFFFFFFFFF
 
 // Removes newlines, tabs and leading/trailing spaces
-char *_SET_CleanString(char *String);
+char *_SET_CleanString(const char *String);
 
 // Splits a value up if needed
 bool _SET_SplitValue(SET_CodeValue *Value);
@@ -363,6 +376,9 @@ SET_Data _SET_ConvertString(const char *String);
 // Reads a special character
 char _SET_ConvertSpecialChar(char Char);
 
+// Loads a settings file
+DIC_Dict *SET_LoadSettings(const char *FileName);
+
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
 void SET_InitDataList(SET_DataList *Struct);
@@ -380,7 +396,88 @@ void SET_DestroyCodeName(SET_CodeName *Struct);
 void SET_DestroyCodeValue(SET_CodeValue *Struct);
 void SET_DestroyCodeList(SET_CodeList *Struct);
 
-char *_SET_CleanString(char *String)
+DIC_Dict *SET_LoadSettings(const char *FileName)
+{
+    // Load file
+    char *String = FIL_Load(FileName);
+
+    if (String == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_LOADSETTINGS_LOAD, FIL_GetError(), _SET_ERRORMES_LOADFILE, FileName);
+        return NULL;
+    }
+
+    // Clean string
+    char *CleanString = _SET_CleanString(String);
+    
+    free(String);
+
+    if (CleanString == NULL)
+    {
+        _SET_AddError(_SET_ERRORID_LOADSETTINGS_CLEAN, _SET_ERRORMES_CLEANFILE, FileName);
+        return NULL;
+    }
+
+    // Split string
+    SET_CodeStruct *CodeStruct = _SET_SplitString(CleanString);
+
+    if (CodeStruct == NULL)
+    {
+        _SET_AddError(_SET_ERRORID_LOADSETTINGS_SPLIT, _SET_ERRORMES_SPLITFILE, FileName);
+        free(CleanString);
+        return NULL;
+    }
+
+    // Load type dict
+    extern DIC_Dict *_SET_TypeDict;
+    extern char *_SET_TypeNames[];
+    extern SET_DataType _SET_Types[];
+
+    _SET_TypeDict = DIC_CreateDict(_SET_TYPECOUNT);
+
+    if (_SET_TypeDict == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_LOADSETTINGS_CREATEDICT, DIC_GetError(), _SET_ERRORMES_CREATEDICT);
+        SET_DestroyCodeStruct(CodeStruct);
+        free(CleanString);
+        return NULL;
+    }
+
+    size_t ElementSize = sizeof(SET_DataType);
+
+    if (!DIC_AddList(_SET_TypeDict, _SET_TypeNames, _SET_TYPECOUNT, (void *)_SET_Types, &ElementSize, DIC_MODE_LIST))
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_LOADSETTINGS_LOADDICT, DIC_GetError(), _SET_ERRORMES_DICTLIST);
+        DIC_DestroyDict(_SET_TypeDict);
+        _SET_TypeDict = NULL;
+        SET_DestroyCodeStruct(CodeStruct);
+        free(CleanString);
+        return NULL;
+    }
+
+    // Convert
+    DIC_Dict* Result = _SET_ConvertStruct(CodeStruct);
+
+    if (Result == NULL)
+    {
+        _SET_AddError(_SET_ERRORID_LOADSETTINGS_CONVERT, _SET_ERRORMES_CONVERTFILE, FileName);
+        DIC_DestroyDict(_SET_TypeDict);
+        _SET_TypeDict = NULL;
+        SET_DestroyCodeStruct(CodeStruct);
+        free(CleanString);
+        return NULL;
+    }
+
+    // Clean up
+    DIC_DestroyDict(_SET_TypeDict);
+    _SET_TypeDict = NULL;
+    SET_DestroyCodeStruct(CodeStruct);
+    free(CleanString);
+
+    return Result;
+}
+
+char *_SET_CleanString(const char *String)
 {
     extern uint32_t _SET_SpecialCharLength;
     extern char _SET_SpecialChar[];
