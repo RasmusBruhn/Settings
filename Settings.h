@@ -115,7 +115,9 @@ enum _SET_ErrorID {
     _SET_ERRORID_LOADSETTINGS_SPLIT = 0x300180202,
     _SET_ERRORID_LOADSETTINGS_CREATEDICT = 0x300180203,
     _SET_ERRORID_LOADSETTINGS_LOADDICT = 0x300180204,
-    _SET_ERRORID_LOADSETTINGS_CONVERT = 0x300180205
+    _SET_ERRORID_LOADSETTINGS_CONVERT = 0x300180205,
+    _SET_ERRORID_TRANSLATE_FILL = 0x300190200,
+    _SET_ERRORID_REVERSETRANSLATION_GETITEM = 0x3001A0100
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -185,6 +187,7 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_SPLITFILE "Unable to split file (%s)"
 #define _SET_ERRORMES_DICTLIST "Unable to add a list to a dict"
 #define _SET_ERRORMES_CONVERTFILE "Unable to convert file (%s)"
+#define _SET_ERRORMES_TRANSLATEFILL "Dict is missing a field which must be included in FILL mode (%s)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -224,17 +227,24 @@ enum __SET_DataTypeBase {
     SET_DATATYPEBASE_STRING = 0x10
 };
 
+enum __SET_TranslationMode {
+    SET_TRANSLATIONMODE_FILL = 0x1, // The struct must be filled completely
+    SET_TRANSLATIONMODE_EMPTY = 0x2 // The dict must be emptied completely (no extra fields)
+};
+
 typedef union ___SET_Data _SET_Data;
 typedef struct __SET_Data SET_Data;
 typedef struct __SET_DataList SET_DataList;
 typedef enum __SET_DataType SET_DataType;
 typedef enum __SET_ValueType SET_ValueType;
 typedef enum __SET_DataTypeBase SET_DataTypeBase;
+typedef enum __SET_TranslationMode SET_TranslationMode;
 typedef struct __SET_CodeName SET_CodeName;
 typedef struct __SET_CodeValue SET_CodeValue;
 typedef union ___SET_CodeValue _SET_CodeValue;
 typedef struct __SET_CodeStruct SET_CodeStruct;
 typedef struct __SET_CodeList SET_CodeList;
+typedef struct __SET_TranslationTable SET_TranslationTable;
 
 union ___SET_Data {
     uint8_t u8;
@@ -291,6 +301,16 @@ struct __SET_CodeStruct {
     SET_CodeName **names; // A list of the names of the fields
     SET_CodeValue **values; // A list of the values of the fields
     uint32_t count; // The number of fields
+};
+
+struct __SET_TranslationTable {
+    char *name; // The name of the field
+    SET_DataType type; // The type of the data
+    size_t size; // The size of the value, if a list then it is the size of each member at the deepest level
+    uint8_t depth; // How deep the list goes, 0 if it is not a list
+    size_t offset; // The offset of the location
+    SET_TranslationTable *sub; // The sub translation table list used if Type is struct
+    size_t count; // The number of elements in the sub table
 };
 
 // List of special characters which should ignore spaces
@@ -380,6 +400,15 @@ char _SET_ConvertSpecialChar(char Char);
 // The output should be destroyed with SET_DestroyDataStruct not DIC_DestroyDict
 DIC_Dict *SET_LoadSettings(const char *FileName);
 
+// Converts a dict into a c struct using a translation table
+bool SET_Translate(void *Struct, DIC_Dict *Dict, SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode);
+
+// Reverse the work done during translation
+void SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, SET_TranslationTable *Table, size_t Count);
+
+// Free a translation list
+void SET_ReverseTranslationList(void *List, SET_DataList *DataList, SET_TranslationTable *Table);
+
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
 void SET_InitDataList(SET_DataList *Struct);
@@ -387,6 +416,7 @@ void SET_InitCodeStruct(SET_CodeStruct *Struct);
 void SET_InitCodeName(SET_CodeName *Struct);
 void SET_InitCodeValue(SET_CodeValue *Struct);
 void SET_InitCodeList(SET_CodeList *Struct);
+void SET_InitTranslationTable(SET_TranslationTable *Struct);
 
 // Destroy struct
 void SET_DestroyData(SET_Data *Struct);
@@ -396,6 +426,101 @@ void SET_DestroyCodeStruct(SET_CodeStruct *Struct);
 void SET_DestroyCodeName(SET_CodeName *Struct);
 void SET_DestroyCodeValue(SET_CodeValue *Struct);
 void SET_DestroyCodeList(SET_CodeList *Struct);
+
+bool SET_Translate(void *Struct, DIC_Dict *Dict, SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode)
+{
+    // Go through all of the fields
+    for (SET_TranslationTable *TableList = Table, *TableListEnd = Table + Count; TableList < TableListEnd; ++TableList)
+    {
+        // Check if it is in the dict
+        if (!DIC_CheckItem(Dict, TableList->name))
+        {
+            // Check if it is an error
+            if (Mode & SET_TRANSLATIONMODE_FILL)
+            {
+                _SET_SetError(_SET_ERRORID_TRANSLATE_FILL, _SET_ERRORMES_TRANSLATEFILL, TableList->name);
+                return NULL;
+            }
+        }
+
+        // Figure out what type it is
+    }
+
+    return true;
+}
+
+void SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, SET_TranslationTable *Table, size_t Count)
+{
+    // Go through all of the fields
+    for (SET_TranslationTable *TableList = Table, *TableListEnd = Table + Count; TableList < TableListEnd; ++TableList)
+    {
+        // Find the item
+        SET_Data *Data = (SET_Data *)DIC_GetItem(Dict, TableList->name);
+
+        if (Data == NULL)
+        {
+            _SET_AddErrorForeign(_SET_ERRORID_REVERSETRANSLATION_GETITEM, DIC_GetError(), _SET_ERRORMES_DICTITEM, TableList->name);
+            continue;
+        }
+
+        // If it is a list, free all of it and set to NULL
+        if (TableList->depth > 0)
+        {
+            SET_ReverseTranslationList(Struct + TableList->offset, Data->data.list, TableList);
+            free(Struct + TableList->offset);
+            *((void **)(Struct + TableList->offset)) = NULL;
+        }
+
+        // If it is a struct, reverse it
+        else if (TableList->type == SET_DATATYPE_STRUCT)
+            SET_ReverseTranslation(Struct + TableList->offset, Data->data.stct, TableList->sub, TableList->count);
+
+        // If it is a string, free it and set to NULL
+        if (TableList->type == SET_DATATYPE_STR)
+        {
+            free(Struct + TableList->offset);
+            *((char **)(Struct + TableList->offset)) = NULL;
+        }
+    }
+}
+
+void SET_ReverseTranslationList(void *List, SET_DataList *DataList, SET_TranslationTable *Table)
+{
+    // If it is no deeper, free the rest
+    if (DataList->depth == 1)
+    {
+        // Free strings
+        if (Table->type == SET_DATATYPE_STR)
+        {
+            for (char **NewList = (char **)List, **EndNewList = (char **)List + DataList->count; NewList < EndNewList; ++NewList)
+                if (*NewList != NULL)
+                    free(*NewList);
+        }
+
+        // Free structs
+        else if (Table->type == SET_DATATYPE_STRUCT)
+        {
+            SET_Data **NewDataList = DataList->list;
+
+            for (void *NewList = List, **EndNewList = List + DataList->count * Table->size; NewList < EndNewList; NewList += Table->size, ++NewDataList)
+                SET_ReverseTranslation(NewList, (*NewDataList)->data.stct, Table->sub, Table->count);
+        }
+    }
+
+    // If it is deeper
+    else
+    {
+        SET_Data **NewDataList = DataList->list;
+
+        // Go through and free each element in the list
+        for (void **NewList = (void **)List, **EndNewList = (void **)List + DataList->count; NewList < EndNewList; ++NewList, ++NewDataList)
+            if (NewList != NULL)
+            {
+                SET_ReverseTranslationList(*NewList, (*NewDataList)->data.list, Table);
+                free(*NewList);
+            }
+    }
+}
 
 DIC_Dict *SET_LoadSettings(const char *FileName)
 {
@@ -2388,6 +2513,16 @@ void SET_InitCodeValue(SET_CodeValue *Struct)
 void SET_InitCodeList(SET_CodeList *Struct)
 {
     Struct->list = NULL;
+    Struct->count = 0;
+}
+
+void SET_InitTranslationTable(SET_TranslationTable *Struct)
+{
+    Struct->name = NULL;
+    Struct->offset = 0;
+    Struct->sub = NULL;
+    Struct->type = SET_DATATYPE_NONE;
+    Struct->depth = 0;
     Struct->count = 0;
 }
 
