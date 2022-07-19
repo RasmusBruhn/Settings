@@ -123,6 +123,7 @@ enum _SET_ErrorID {
     _SET_ERRORID_REVERSETRANSLATION_GETITEM = 0x3001A0100,
     _SET_ERRORID_TRANSLATELIST_CONVERTLIST = 0x3001B0200,
     _SET_ERRORID_TRANSLATELIST_MALLOC1 = 0x3001B0201,
+    _SET_ERRORID_TRANSLATELIST_UNKNOWNTYPE = 0x3001B0202,
     _SET_ERRORID_TRANSLATEELEMENT_LISTMATCH = 0x3001C0200,
     _SET_ERRORID_TRANSLATEELEMENT_LIST = 0x3001C0201,
     _SET_ERRORID_TRANSLATEELEMENT_STRUCTMATCH = 0x3001C0202,
@@ -428,10 +429,10 @@ DIC_Dict *SET_LoadSettings(const char *FileName);
 bool SET_Translate(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode);
 
 // Converts a list from a dict using a transation table
-void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTable *Table, SET_TranslationMode Mode);
+void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
 
 // Translate a single element
-bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_TranslationTable *Table, SET_TranslationMode Mode);
+bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
 
 // Reverse the work done during translation
 void _SET_ReverseTranslation(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count);
@@ -505,7 +506,7 @@ bool SET_Translate(void *Struct, const DIC_Dict *Dict, const SET_TranslationTabl
         }
 
         // Translate the item
-        if (!_SET_TranslateElement(Struct + TableList->offset, Data, TableList, Mode))
+        if (!_SET_TranslateElement(Struct + TableList->offset, Data, TableList, TableList->depth, Mode))
         {
             _SET_AddError(_SET_ERRORID_TRANSLATE_TRANSLATE, _SET_ERRORMES_TRANSLATEITEM, TableList->name);
             _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
@@ -516,54 +517,128 @@ bool SET_Translate(void *Struct, const DIC_Dict *Dict, const SET_TranslationTabl
     return true;
 }
 
-void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTable *Table, SET_TranslationMode Mode)
+void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode)
 {
-    // If it is deeper
-    if (DataList->depth > 1)
-    {
-        void **NewList = (void **)malloc(sizeof(void *) * DataList->count);
+    void *NewList = NULL;
 
-        if (NewList == NULL)
+    // Get size of one element
+    size_t Size = 0;
+
+    if (Depth > 1)
+        Size = sizeof(void *);
+    
+    else
+        switch (Table->type)
         {
-            _SET_AddErrorForeign(_SET_ERRORID_TRANSLATELIST_MALLOC1, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(void *) * DataList->count);
-            return NULL;
+            case (SET_DATATYPE_INT8):
+            case (SET_DATATYPE_UINT8):
+                Size = sizeof(uint8_t);
+                break;
+
+            case (SET_DATATYPE_INT16):
+            case (SET_DATATYPE_UINT16):
+                Size = sizeof(uint16_t);
+                break;
+
+            case (SET_DATATYPE_INT32):
+            case (SET_DATATYPE_UINT32):
+                Size = sizeof(uint32_t);
+                break;
+
+            case (SET_DATATYPE_INT64):
+            case (SET_DATATYPE_UINT64):
+                Size = sizeof(uint64_t);
+                break;
+
+            case (SET_DATATYPE_SINT8):
+                Size = sizeof(int8_t);
+                break;
+
+            case (SET_DATATYPE_SINT16):
+                Size = sizeof(int16_t);
+                break;
+
+            case (SET_DATATYPE_SINT32):
+                Size = sizeof(int32_t);
+                break;
+
+            case (SET_DATATYPE_SINT64):
+                Size = sizeof(int64_t);
+                break;
+
+            case (SET_DATATYPE_FLOAT):
+                Size = sizeof(float);
+                break;
+
+            case (SET_DATATYPE_DOUBLE):
+                Size = sizeof(double);
+                break;
+
+            case (SET_DATATYPE_CHAR):
+                Size = sizeof(char);
+                break;
+
+            case (SET_DATATYPE_STR):
+                Size = sizeof(char *);
+                break;
+
+            case (SET_DATATYPE_STRUCT):
+                Size = Table->size;
+                break;
+
+            default:
+                _SET_SetError(_SET_ERRORID_TRANSLATELIST_UNKNOWNTYPE, _SET_ERRORMES_WRONGTYPE, Table->type);
+                return NULL;
+                break;
         }
 
-        for (void **InitList = NewList, **EndInitList = NewList + DataList->count; InitList < EndInitList; ++InitList)
+    // Allocate memory
+    NewList = malloc(Size * DataList->count);
+
+    if (NewList == NULL)
+    {
+        _SET_AddErrorForeign(_SET_ERRORID_TRANSLATELIST_MALLOC1, strerror(errno), _SET_ERRORMES_MALLOC, Size * DataList->count);
+        return NULL;
+    }
+
+    // Initialize
+    if (Depth > 1 || Table->type == SET_DATATYPE_STR)
+        for (void **InitList = (void **)NewList, **EndInitList = (void **)NewList + DataList->count; InitList < EndInitList; ++InitList)
             *InitList = NULL;
 
-        // Generate list
-        SET_Data **FillDataList = DataList->list;
+    // Fill in
+    SET_Data **FillDataList = DataList->list;
 
-        for (void **FillList = NewList, **EndFillList = NewList + DataList->count; FillList < EndFillList; ++FillList, ++FillDataList)
+    for (void *FillList = NewList, *EndFillList = NewList + DataList->count; FillList < EndFillList; FillList += Size, ++FillDataList)
+    {
+        // Translate sub list
+        if (!_SET_TranslateElement(NewList, *FillDataList, Table, Depth - 1, Mode))
         {
-            void *NewElement = _SET_TranslateList((*FillDataList)->data.list, Table, Mode);
-
-            if (NewElement == NULL)
-            {
-                _SET_AddError(_SET_ERRORID_TRANSLATELIST_CONVERTLIST, _SET_ERRORMES_CONVERTLIST2, _SET_ELEMENTPREMES, FillList - NewList);
-                _SET_ReverseTranslationList((void *)NewList, DataList, Table);
-                return NULL;
-            }
+            _SET_AddError(_SET_ERRORID_TRANSLATELIST_CONVERTLIST, _SET_ERRORMES_CONVERTLIST2, _SET_ELEMENTPREMES, FillList - NewList);
+            _SET_ReverseTranslationList(NewList, DataList, Table);
+            free(NewList);
+            return NULL;
         }
     }
+
+    return NewList;
 }
 
-bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_TranslationTable *Table, SET_TranslationMode Mode)
+bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode)
 {
     // Figure out what type it is
     // List
-    if (Table->depth > 0)
+    if (Depth > 0)
     {
         // Make sure the depth is correct
-        if (Data->type != SET_DATATYPE_LIST || Table->depth != Data->data.list->depth)
+        if (Data->type != SET_DATATYPE_LIST || Depth != Data->data.list->depth)
         {
-            _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_LISTMATCH, _SET_ERRORMES_LISTMATCH3, Table->depth, ((Data->type == SET_DATATYPE_LIST) ? (Data->data.list->depth) : (0)));
+            _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_LISTMATCH, _SET_ERRORMES_LISTMATCH3, Depth, ((Data->type == SET_DATATYPE_LIST) ? (Data->data.list->depth) : (0)));
             return false;
         }
 
         // Translate the list
-        void *List = _SET_TranslateList(Data->data.list, Table, Mode | SET_TRANSLATIONMODE_FILL);
+        void *List = _SET_TranslateList(Data->data.list, Table, Depth, Mode | SET_TRANSLATIONMODE_FILL);
 
         if (List == NULL)
         {
