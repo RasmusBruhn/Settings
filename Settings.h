@@ -118,15 +118,20 @@ enum _SET_ErrorID {
     _SET_ERRORID_LOADSETTINGS_CONVERT = 0x300180205,
     _SET_ERRORID_TRANSLATE_FILL = 0x300190200,
     _SET_ERRORID_TRANSLATE_GETITEM = 0x300190201,
-    _SET_ERRORID_TRANSLATE_UNKNOWNTYPE = 0x300190202,
-    _SET_ERRORID_TRANSLATE_CONVERTVALUE = 0x300190203,
-    _SET_ERRORID_TRANSLATE_STRINGMATCH = 0x300190204,
-    _SET_ERRORID_TRANSLATE_STRINGMALLOC = 0x300190205,
-    _SET_ERRORID_TRANSLATE_STRUCTMATCH = 0x300190206,
-    _SET_ERRORID_TRANSLATE_NOSTRUCT = 0x300190207,
-    _SET_ERRORID_TRANSLATE_CONVERTSTRUCT = 0x300190208,
-    _SET_ERRORID_TRANSLATE_EMPTY = 0x300190209,
-    _SET_ERRORID_REVERSETRANSLATION_GETITEM = 0x3001A0100
+    _SET_ERRORID_TRANSLATE_EMPTY = 0x300190202,
+    _SET_ERRORID_TRANSLATE_TRANSLATE = 0x300190203,
+    _SET_ERRORID_REVERSETRANSLATION_GETITEM = 0x3001A0100,
+    _SET_ERRORID_TRANSLATELIST_CONVERTLIST = 0x3001B0200,
+    _SET_ERRORID_TRANSLATELIST_MALLOC1 = 0x3001B0201,
+    _SET_ERRORID_TRANSLATEELEMENT_LISTMATCH = 0x3001C0200,
+    _SET_ERRORID_TRANSLATEELEMENT_LIST = 0x3001C0201,
+    _SET_ERRORID_TRANSLATEELEMENT_STRUCTMATCH = 0x3001C0202,
+    _SET_ERRORID_TRANSLATEELEMENT_NOSTRUCT = 0x3001C0203,
+    _SET_ERRORID_TRANSLATEELEMENT_CONVERTSTRUCT = 0x3001C0204,
+    _SET_ERRORID_TRANSLATEELEMENT_STRINGMATCH = 0x3001C0205,
+    _SET_ERRORID_TRANSLATEELEMENT_STRINGMALLOC = 0x3001C0206,
+    _SET_ERRORID_TRANSLATEELEMENT_CONVERTVALUE = 0x3001C0207,
+    _SET_ERRORID_TRANSLATEELEMENT_UNKNOWNTYPE = 0x3001C0208
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -162,15 +167,15 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_DICTEXIST "The dict has not been initialised"
 #define _SET_ERRORMES_UNKNOWNTYPE "Type is not in the database (%s)"
 #define _SET_ERRORMES_DICTITEM "Unable to retrieve item from dict (%s)"
-#define _SET_ERRORMES_READTYPE "Unable to read the type (%s: %u)"
-#define _SET_ERRORMES_READVALUE "Unable to read the value (%s: %u)"
+#define _SET_ERRORMES_READTYPE "Unable to read the type (%s: %lu)"
+#define _SET_ERRORMES_READVALUE "Unable to read the value (%s: %lu)"
 #define _SET_ERRORMES_DICTADD "Unable to add item to dict (%s)"
-#define _SET_ERRORMES_DUBLICATE "2 fields have been given the same name (%s: %u)"
+#define _SET_ERRORMES_DUBLICATE "2 fields have been given the same name (%s: %lu)"
 #define _SET_ERRORMES_WRONGTYPE "Unknown type ID (%u)"
-#define _SET_ERRORMES_LISTELEMENT "If one element is a list, they all must be a list of the same depth (%s: %u)"
+#define _SET_ERRORMES_LISTELEMENT "If one element is a list, they all must be a list of the same depth (%s: %lu)"
 #define _SET_ERRORMES_NOELEMENTS "A list must have at least one element"
-#define _SET_ERRORMES_TYPEELEMENT "If one element is either a char, string or struct all other elements must be too (%s: %u)"
-#define _SET_ERRORMES_NUMBERELEMENT "If one element is a number all other elements must be too (%s: %u)"
+#define _SET_ERRORMES_TYPEELEMENT "If one element is either a char, string or struct all other elements must be too (%s: %lu)"
+#define _SET_ERRORMES_NUMBERELEMENT "If one element is a number all other elements must be too (%s: %lu)"
 #define _SET_ERRORMES_DEPTHMATCH "List did not have expected depth (Expected: %u, received: %u)"
 #define _SET_ERRORMES_TYPEMATCH "Value did not have expected type (Expected: %u, received: %u)"
 #define _SET_ERRORMES_FLOATMATCH "Unable to convert a float into an int"
@@ -198,12 +203,14 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_CONVERTFILE "Unable to convert file (%s)"
 #define _SET_ERRORMES_TRANSLATEFILL "Dict is missing a field which must be included in FILL mode (%s)"
 #define _SET_ERRORMES_WRONGTYPE2 "Unknown type ID (%s: %u)"
-#define _SET_ERRORMES_CONVERTVALUE2 "Unable to convert value (%s)"
-#define _SET_ERRORMES_STRINGMATCH "Cannot convert other types into strings (%s: %u)"
-#define _SET_ERRORMES_STRUCTMATCH "Cannot convert other types into structs (%s: %u)"
-#define _SET_ERRORMES_MISSINGSUB "Translation table is missing sub (%s)"
-#define _SET_ERRORMES_CONVERTSTRUCT2 "Unable to convert struct (%s)"
+#define _SET_ERRORMES_STRINGMATCH "Cannot convert other types into strings (Received: %u)"
+#define _SET_ERRORMES_STRUCTMATCH "Cannot convert other types into structs (Received: %u)"
+#define _SET_ERRORMES_MISSINGSUB "Translation table is missing sub"
 #define _SET_ERRORMES_TRANSLATEEMPTY "Dict has too many fields which must not be the case in EMPTY mode (%s)"
+#define _SET_ERRORMES_LISTMATCH3 "The depth of list did not match what was expected (Expected: %u, received: %u)"
+#define _SET_ERRORMES_CONVERTLIST2 "Unable to convert list (%s: %lu)"
+#define _SET_ERRORMES_TRANSLATELIST "Unable to translate list"
+#define _SET_ERRORMES_TRANSLATEITEM "Unable to translate item (%s)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -244,6 +251,7 @@ enum __SET_DataTypeBase {
 };
 
 enum __SET_TranslationMode {
+    SET_TRANSLATIONMODE_NONE = 0x0, // No mode activated
     SET_TRANSLATIONMODE_FILL = 0x1, // The struct must be filled completely
     SET_TRANSLATIONMODE_EMPTY = 0x2 // The dict must be emptied completely (no extra fields)
 };
@@ -417,13 +425,19 @@ char _SET_ConvertSpecialChar(char Char);
 DIC_Dict *SET_LoadSettings(const char *FileName);
 
 // Converts a dict into a c struct using a translation table
-bool SET_Translate(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode);
+bool SET_Translate(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode);
+
+// Converts a list from a dict using a transation table
+void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTable *Table, SET_TranslationMode Mode);
+
+// Translate a single element
+bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_TranslationTable *Table, SET_TranslationMode Mode);
 
 // Reverse the work done during translation
-void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count);
+void _SET_ReverseTranslation(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count);
 
 // Free a translation list
-void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_TranslationTable *Table);
+void _SET_ReverseTranslationList(void *List, const SET_DataList *DataList, const SET_TranslationTable *Table);
 
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
@@ -443,7 +457,7 @@ void SET_DestroyCodeName(SET_CodeName *Struct);
 void SET_DestroyCodeValue(SET_CodeValue *Struct);
 void SET_DestroyCodeList(SET_CodeList *Struct);
 
-bool SET_Translate(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode)
+bool SET_Translate(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode)
 {
     // Check that EMPTY mode is fulfilled
     if (Mode & SET_TRANSLATIONMODE_EMPTY)
@@ -490,89 +504,10 @@ bool SET_Translate(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Tab
             return false;
         }
 
-        // Figure out what type it is
-        // List
-        if (TableList->depth > 0)
+        // Translate the item
+        if (!_SET_TranslateElement(Struct + TableList->offset, Data, TableList, Mode))
         {
-
-        }
-
-        // Another struct
-        else if (TableList->type == SET_DATATYPE_STRUCT)
-        {
-            // Make sure type is correct
-            if (Data->type != SET_DATATYPE_STRUCT)
-            {
-                _SET_SetError(_SET_ERRORID_TRANSLATE_STRUCTMATCH, _SET_ERRORMES_STRUCTMATCH, TableList->name, Data->type);
-                _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
-                return false;
-            }
-
-            // Make sure there is a sub
-            if (TableList->sub == NULL)
-            {
-                _SET_SetError(_SET_ERRORID_TRANSLATE_NOSTRUCT, _SET_ERRORMES_MISSINGSUB, TableList->name);
-                _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
-                return false;
-            }
-
-            // Fill in the struct
-            if (!SET_Translate(Struct + TableList->offset, Data->data.stct, TableList->sub, TableList->count, Mode))
-            {
-                _SET_AddError(_SET_ERRORID_TRANSLATE_CONVERTSTRUCT, _SET_ERRORMES_CONVERTSTRUCT2, TableList->name);
-                _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
-                return false;
-            }
-        }
-
-        // A string
-        else if (TableList->type == SET_DATATYPE_STR)
-        {
-            // Make sure it is a string
-            if (Data->type != SET_DATATYPE_STR)
-            {
-                _SET_SetError(_SET_ERRORID_TRANSLATE_STRINGMATCH, _SET_ERRORMES_STRINGMATCH, TableList->name, Data->type);
-                _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
-                return false;
-            }
-
-            // Get memory
-            char *String = (char *)malloc(sizeof(char) * (strlen(Data->data.str) + 1));
-
-            if (String == NULL)
-            {
-                _SET_AddErrorForeign(_SET_ERRORID_TRANSLATE_STRINGMALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(char) * (strlen(Data->data.str) + 1));
-                _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
-                return false;
-            }
-
-            strcpy(String, Data->data.str);
-
-            // Copy data
-            *(char **)(Struct + TableList->offset) = String;
-        }
-
-        // A number of char
-        else if (TableList->type >= SET_DATATYPE_INT8 && TableList->type <= SET_DATATYPE_CHAR)
-        {
-            // Attempt to convert type
-            SET_Data ConvertData = _SET_ConvertType(Data, TableList->type);
-
-            if (ConvertData.type == SET_DATATYPE_NONE)
-            {
-                _SET_AddError(_SET_ERRORID_TRANSLATE_CONVERTVALUE, _SET_ERRORMES_CONVERTVALUE2, TableList->name);
-                _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
-                return false;
-            }
-
-            // Copy data
-            memcpy(Struct + TableList->offset, &ConvertData.data, TableList->size);
-        }
-
-        // Error
-        else
-        {
-            _SET_SetError(_SET_ERRORID_TRANSLATE_UNKNOWNTYPE, _SET_ERRORMES_WRONGTYPE2, TableList->name, TableList->type);
+            _SET_AddError(_SET_ERRORID_TRANSLATE_TRANSLATE, _SET_ERRORMES_TRANSLATEITEM, TableList->name);
             _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
             return false;
         }
@@ -581,7 +516,199 @@ bool SET_Translate(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Tab
     return true;
 }
 
-void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count)
+void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTable *Table, SET_TranslationMode Mode)
+{
+    // If it is deeper
+    if (DataList->depth > 1)
+    {
+        void **NewList = (void **)malloc(sizeof(void *) * DataList->count);
+
+        if (NewList == NULL)
+        {
+            _SET_AddErrorForeign(_SET_ERRORID_TRANSLATELIST_MALLOC1, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(void *) * DataList->count);
+            return NULL;
+        }
+
+        for (void **InitList = NewList, **EndInitList = NewList + DataList->count; InitList < EndInitList; ++InitList)
+            *InitList = NULL;
+
+        // Generate list
+        SET_Data **FillDataList = DataList->list;
+
+        for (void **FillList = NewList, **EndFillList = NewList + DataList->count; FillList < EndFillList; ++FillList, ++FillDataList)
+        {
+            void *NewElement = _SET_TranslateList((*FillDataList)->data.list, Table, Mode);
+
+            if (NewElement == NULL)
+            {
+                _SET_AddError(_SET_ERRORID_TRANSLATELIST_CONVERTLIST, _SET_ERRORMES_CONVERTLIST2, _SET_ELEMENTPREMES, FillList - NewList);
+                _SET_ReverseTranslationList((void *)NewList, DataList, Table);
+                return NULL;
+            }
+        }
+    }
+}
+
+bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_TranslationTable *Table, SET_TranslationMode Mode)
+{
+    // Figure out what type it is
+    // List
+    if (Table->depth > 0)
+    {
+        // Make sure the depth is correct
+        if (Data->type != SET_DATATYPE_LIST || Table->depth != Data->data.list->depth)
+        {
+            _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_LISTMATCH, _SET_ERRORMES_LISTMATCH3, Table->depth, ((Data->type == SET_DATATYPE_LIST) ? (Data->data.list->depth) : (0)));
+            return false;
+        }
+
+        // Translate the list
+        void *List = _SET_TranslateList(Data->data.list, Table, Mode | SET_TRANSLATIONMODE_FILL);
+
+        if (List == NULL)
+        {
+            _SET_AddError(_SET_ERRORID_TRANSLATEELEMENT_LIST, _SET_ERRORMES_TRANSLATELIST);
+            return false;
+        }
+
+        *(void **)Struct = List;
+    }
+
+    // Another struct
+    else if (Table->type == SET_DATATYPE_STRUCT)
+    {
+        // Make sure type is correct
+        if (Data->type != SET_DATATYPE_STRUCT)
+        {
+            _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_STRUCTMATCH, _SET_ERRORMES_STRUCTMATCH, Data->type);
+            return false;
+        }
+
+        // Make sure there is a sub
+        if (Table->sub == NULL)
+        {
+            _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_NOSTRUCT, _SET_ERRORMES_MISSINGSUB);
+            return false;
+        }
+
+        // Fill in the struct
+        if (!SET_Translate(Struct, Data->data.stct, Table->sub, Table->count, Mode))
+        {
+            _SET_AddError(_SET_ERRORID_TRANSLATEELEMENT_CONVERTSTRUCT, _SET_ERRORMES_CONVERTSTRUCT);
+            return false;
+        }
+    }
+
+    // A string
+    else if (Table->type == SET_DATATYPE_STR)
+    {
+        // Make sure it is a string
+        if (Data->type != SET_DATATYPE_STR)
+        {
+            _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_STRINGMATCH, _SET_ERRORMES_STRINGMATCH, Data->type);
+            return false;
+        }
+
+        // Get memory
+        char *String = (char *)malloc(sizeof(char) * (strlen(Data->data.str) + 1));
+
+        if (String == NULL)
+        {
+            _SET_AddErrorForeign(_SET_ERRORID_TRANSLATEELEMENT_STRINGMALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(char) * (strlen(Data->data.str) + 1));
+            return false;
+        }
+
+        strcpy(String, Data->data.str);
+
+        // Copy data
+        *(char **)Struct = String;
+    }
+
+    // A number of char
+    else if (Table->type >= SET_DATATYPE_INT8 && Table->type <= SET_DATATYPE_CHAR)
+    {
+        // Get the size
+        size_t Size;
+
+        switch (Table->type)
+        {
+            case (SET_DATATYPE_INT8):
+            case (SET_DATATYPE_UINT8):
+                Size = sizeof(uint8_t);
+                break;
+
+            case (SET_DATATYPE_INT16):
+            case (SET_DATATYPE_UINT16):
+                Size = sizeof(uint16_t);
+                break;
+
+            case (SET_DATATYPE_INT32):
+            case (SET_DATATYPE_UINT32):
+                Size = sizeof(uint32_t);
+                break;
+
+            case (SET_DATATYPE_INT64):
+            case (SET_DATATYPE_UINT64):
+                Size = sizeof(uint64_t);
+                break;
+
+            case (SET_DATATYPE_SINT8):
+                Size = sizeof(int8_t);
+                break;
+
+            case (SET_DATATYPE_SINT16):
+                Size = sizeof(int16_t);
+                break;
+
+            case (SET_DATATYPE_SINT32):
+                Size = sizeof(int32_t);
+                break;
+
+            case (SET_DATATYPE_SINT64):
+                Size = sizeof(int64_t);
+                break;
+
+            case (SET_DATATYPE_FLOAT):
+                Size = sizeof(float);
+                break;
+
+            case (SET_DATATYPE_DOUBLE):
+                Size = sizeof(double);
+                break;
+
+            case (SET_DATATYPE_CHAR):
+                Size = sizeof(char);
+                break;
+
+            default:
+                Size = 0;
+                break;
+        }
+
+        // Attempt to convert type
+        SET_Data ConvertData = _SET_ConvertType(Data, Table->type);
+
+        if (ConvertData.type == SET_DATATYPE_NONE)
+        {
+            _SET_AddError(_SET_ERRORID_TRANSLATEELEMENT_CONVERTVALUE, _SET_ERRORMES_CONVERTVALUE);
+            return false;
+        }
+
+        // Copy data
+        memcpy(Struct, &ConvertData.data, Size);
+    }
+
+    // Error
+    else
+    {
+        _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_UNKNOWNTYPE, _SET_ERRORMES_WRONGTYPE, Table->type);
+        return false;
+    }
+
+    return true;
+}
+
+void _SET_ReverseTranslation(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count)
 {
     // Go through all of the fields
     for (const SET_TranslationTable *TableList = Table, *TableListEnd = Table + Count; TableList < TableListEnd; ++TableList)
@@ -616,7 +743,7 @@ void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_Translation
     }
 }
 
-void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_TranslationTable *Table)
+void _SET_ReverseTranslationList(void *List, const SET_DataList *DataList, const SET_TranslationTable *Table)
 {
     // If it is no deeper, free the rest
     if (DataList->depth == 1)
@@ -634,7 +761,7 @@ void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_T
         {
             SET_Data **NewDataList = DataList->list;
 
-            for (void *NewList = List, **EndNewList = List + DataList->count * Table->size; NewList < EndNewList; NewList += Table->size, ++NewDataList)
+            for (void *NewList = List, *EndNewList = List + DataList->count * Table->size; NewList < EndNewList; NewList += Table->size, ++NewDataList)
                 _SET_ReverseTranslation(NewList, (*NewDataList)->data.stct, Table->sub, Table->count);
         }
     }
