@@ -264,6 +264,7 @@ enum __SET_TranslationMode {
 typedef union ___SET_Data _SET_Data;
 typedef struct __SET_Data SET_Data;
 typedef struct __SET_DataList SET_DataList;
+typedef DIC_Dict SET_DataStruct;
 typedef enum __SET_DataType SET_DataType;
 typedef enum __SET_ValueType SET_ValueType;
 typedef enum __SET_DataTypeBase SET_DataTypeBase;
@@ -385,7 +386,7 @@ SET_CodeStruct *_SET_SplitString(char *String);
 SET_DataTypeBase _SET_GetPossibleType(const char *Value);
 
 // Converts a code struct into a dictionary
-DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct);
+SET_DataStruct *_SET_ConvertStruct(const SET_CodeStruct *Struct);
 
 // Converts a list from a string
 SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint8_t Depth);
@@ -434,10 +435,10 @@ char _SET_ConvertSpecialChar(char Char);
 
 // Loads a settings file
 // The output should be destroyed with SET_DestroyDataStruct not DIC_DestroyDict
-DIC_Dict *SET_LoadSettings(const char *FileName);
+SET_DataStruct *SET_LoadSettings(const char *FileName);
 
 // Converts a dict into a c struct using a translation table
-bool SET_Translate(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode);
+bool SET_Translate(void *Struct, SET_DataStruct *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode);
 
 // Converts a list from a dict using a transation table
 void *_SET_TranslateList(SET_DataList *DataList, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
@@ -446,7 +447,7 @@ void *_SET_TranslateList(SET_DataList *DataList, const SET_TranslationTable *Tab
 bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
 
 // Reverse the work done during translation
-void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count);
+void _SET_ReverseTranslation(void *Struct, SET_DataStruct *Dict, const SET_TranslationTable *Table, size_t Count);
 
 // Free a translation list
 void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_TranslationTable *Table);
@@ -463,13 +464,13 @@ void SET_InitTranslationTable(SET_TranslationTable *Struct);
 // Destroy struct
 void SET_DestroyData(SET_Data *Struct);
 void SET_DestroyDataList(SET_DataList *Struct);
-void SET_DestroyDataStruct(DIC_Dict *Struct);
+void SET_DestroyDataStruct(SET_DataStruct *Struct);
 void SET_DestroyCodeStruct(SET_CodeStruct *Struct);
 void SET_DestroyCodeName(SET_CodeName *Struct);
 void SET_DestroyCodeValue(SET_CodeValue *Struct);
 void SET_DestroyCodeList(SET_CodeList *Struct);
 
-bool SET_Translate(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode)
+bool SET_Translate(void *Struct, SET_DataStruct *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode)
 {
     // Check that EMPTY mode is fulfilled
     if (Mode & SET_TRANSLATIONMODE_EMPTY)
@@ -794,7 +795,7 @@ bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTa
     return true;
 }
 
-void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count)
+void _SET_ReverseTranslation(void *Struct, SET_DataStruct *Dict, const SET_TranslationTable *Table, size_t Count)
 {
     // Go through all of the fields
     for (const SET_TranslationTable *TableList = Table, *TableListEnd = Table + Count; TableList < TableListEnd; ++TableList)
@@ -867,7 +868,7 @@ void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_T
     }
 }
 
-DIC_Dict *SET_LoadSettings(const char *FileName)
+SET_DataStruct *SET_LoadSettings(const char *FileName)
 {
     // Load file
     char *String = FIL_Load(FileName);
@@ -1767,7 +1768,7 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
     return Type;
 }
 
-DIC_Dict *_SET_ConvertStruct(const SET_CodeStruct *Struct)
+SET_DataStruct *_SET_ConvertStruct(const SET_CodeStruct *Struct)
 {
     // Create a dictionary
     DIC_Dict *Dict = DIC_CreateDict(Struct->count);
@@ -2956,7 +2957,7 @@ void SET_DestroyDataList(SET_DataList *Struct)
     free(Struct);
 }
 
-void SET_DestroyDataStruct(DIC_Dict *Struct)
+void SET_DestroyDataStruct(SET_DataStruct *Struct)
 {
     for (DIC_LinkList **List = Struct->list, **EndList = Struct->list + Struct->length; List < EndList; ++List)
         for (DIC_LinkList *Link = *List; Link != NULL; Link = Link->next)
