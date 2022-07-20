@@ -712,13 +712,17 @@ bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTa
     }
 
     // A number of char
-    else if (Table->type >= SET_DATATYPE_INT8 && Table->type <= SET_DATATYPE_CHAR)
+    else if (Table->type >= SET_DATATYPE_BOOL && Table->type <= SET_DATATYPE_CHAR)
     {
         // Get the size
         size_t Size;
 
         switch (Table->type)
         {
+            case (SET_DATATYPE_BOOL):
+                Size = sizeof(bool);
+                break;
+
             case (SET_DATATYPE_INT8):
             case (SET_DATATYPE_UINT8):
                 Size = sizeof(uint8_t);
