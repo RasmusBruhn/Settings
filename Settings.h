@@ -801,7 +801,7 @@ void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_Translation
         if (TableList->depth > 0)
         {
             _SET_ReverseTranslationList(Struct + TableList->offset, Data->data.list, TableList);
-            free(Struct + TableList->offset);
+            free(*(void **)(Struct + TableList->offset));
             *((void **)(Struct + TableList->offset)) = NULL;
         }
 
@@ -810,9 +810,9 @@ void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_Translation
             _SET_ReverseTranslation(Struct + TableList->offset, Data->data.stct, TableList->sub, TableList->count);
 
         // If it is a string, free it and set to NULL
-        if (TableList->type == SET_DATATYPE_STR)
+        else if (TableList->type == SET_DATATYPE_STR)
         {
-            free(Struct + TableList->offset);
+            free(*(char **)(Struct + TableList->offset));
             *((char **)(Struct + TableList->offset)) = NULL;
         }
     }

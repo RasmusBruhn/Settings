@@ -35,7 +35,26 @@ SET_TranslationTable StructTable[STRUCTCOUNT] = {
     {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
     {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
     {.name = "Option6", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
-    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)},
+    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)}
+};
+
+SET_TranslationTable FillTable[STRUCTCOUNT] = {
+    {.name = "Option1", .type = SET_DATATYPE_DOUBLE, .depth = 0, .offset = offsetof(struct Struct1, option1)},
+    {.name = "Option2", .type = SET_DATATYPE_FLOAT, .depth = 0, .offset = offsetof(struct Struct1, option2)},
+    {.name = "Option3", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option3)},
+    {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
+    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
+    {.name = "Option6wrong", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
+    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)}
+};
+
+SET_TranslationTable EmptyTable[STRUCTCOUNT - 1] = {
+    {.name = "Option1", .type = SET_DATATYPE_DOUBLE, .depth = 0, .offset = offsetof(struct Struct1, option1)},
+    {.name = "Option3", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option3)},
+    {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
+    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
+    {.name = "Option6", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
+    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)}
 };
 
 void PrintCodeStruct(SET_CodeStruct * Struct);
@@ -127,6 +146,50 @@ int main(int argc, char **argv)
 
     // Print struct
     PrintStruct(&Struct);
+
+    free(Struct.option4);
+    free(Struct.option5.sub1);
+    free(Struct.option5.sub3);
+
+    Struct.option1 = 0;
+    Struct.option2 = 0;
+    Struct.option3 = '\0';
+    Struct.option4 = NULL;
+    Struct.option5.sub1 = NULL;
+    Struct.option5.sub2 = 0;
+    Struct.option5.sub3 = NULL;
+    Struct.option6 = '\0';
+    Struct.option7 = NULL;
+
+    if (!SET_Translate(&Struct, Dict, StructTable, STRUCTCOUNT, SET_TRANSLATIONMODE_FILL | SET_TRANSLATIONMODE_EMPTY))
+    {
+        printf("Unable to translate settings: %s\n", SET_GetError());
+        return 0;
+    }
+
+    // Print struct
+    PrintStruct(&Struct);
+
+    free(Struct.option4);
+    free(Struct.option5.sub1);
+    free(Struct.option5.sub3);
+
+    // Make sure there are errors
+    if (SET_Translate(&Struct, Dict, FillTable, STRUCTCOUNT, SET_TRANSLATIONMODE_FILL))
+    {
+        printf("There should have been a fill error\n");
+        return 0;
+    }
+
+    printf("Fill Error: %s\n", SET_GetError());
+
+    if (SET_Translate(&Struct, Dict, EmptyTable, STRUCTCOUNT - 1, SET_TRANSLATIONMODE_EMPTY))
+    {
+        printf("There should have been a empty error\n");
+        return 0;
+    }
+
+    printf("Empty Error: %s\n", SET_GetError());
 
     SET_DestroyDataStruct(Dict);
 
