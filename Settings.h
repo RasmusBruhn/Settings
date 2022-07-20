@@ -426,19 +426,19 @@ char _SET_ConvertSpecialChar(char Char);
 DIC_Dict *SET_LoadSettings(const char *FileName);
 
 // Converts a dict into a c struct using a translation table
-bool SET_Translate(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode);
+bool SET_Translate(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode);
 
 // Converts a list from a dict using a transation table
-void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
+void *_SET_TranslateList(SET_DataList *DataList, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
 
 // Translate a single element
-bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
+bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
 
 // Reverse the work done during translation
-void _SET_ReverseTranslation(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count);
+void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count);
 
 // Free a translation list
-void _SET_ReverseTranslationList(void *List, const SET_DataList *DataList, const SET_TranslationTable *Table);
+void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_TranslationTable *Table);
 
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
@@ -458,7 +458,7 @@ void SET_DestroyCodeName(SET_CodeName *Struct);
 void SET_DestroyCodeValue(SET_CodeValue *Struct);
 void SET_DestroyCodeList(SET_CodeList *Struct);
 
-bool SET_Translate(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode)
+bool SET_Translate(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode)
 {
     // Check that EMPTY mode is fulfilled
     if (Mode & SET_TRANSLATIONMODE_EMPTY)
@@ -517,7 +517,7 @@ bool SET_Translate(void *Struct, const DIC_Dict *Dict, const SET_TranslationTabl
     return true;
 }
 
-void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode)
+void *_SET_TranslateList(SET_DataList *DataList, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode)
 {
     void *NewList = NULL;
 
@@ -609,10 +609,10 @@ void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTabl
     // Fill in
     SET_Data **FillDataList = DataList->list;
 
-    for (void *FillList = NewList, *EndFillList = NewList + DataList->count; FillList < EndFillList; FillList += Size, ++FillDataList)
+    for (void *FillList = NewList, *EndFillList = NewList + Size * DataList->count; FillList < EndFillList; FillList += Size, ++FillDataList)
     {
         // Translate sub list
-        if (!_SET_TranslateElement(NewList, *FillDataList, Table, Depth - 1, Mode))
+        if (!_SET_TranslateElement(FillList, *FillDataList, Table, Depth - 1, Mode))
         {
             _SET_AddError(_SET_ERRORID_TRANSLATELIST_CONVERTLIST, _SET_ERRORMES_CONVERTLIST2, _SET_ELEMENTPREMES, FillList - NewList);
             _SET_ReverseTranslationList(NewList, DataList, Table);
@@ -624,7 +624,7 @@ void *_SET_TranslateList(const SET_DataList *DataList, const SET_TranslationTabl
     return NewList;
 }
 
-bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode)
+bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode)
 {
     // Figure out what type it is
     // List
@@ -783,7 +783,7 @@ bool _SET_TranslateElement(void *Struct, const SET_Data *Data, const SET_Transla
     return true;
 }
 
-void _SET_ReverseTranslation(void *Struct, const DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count)
+void _SET_ReverseTranslation(void *Struct, DIC_Dict *Dict, const SET_TranslationTable *Table, size_t Count)
 {
     // Go through all of the fields
     for (const SET_TranslationTable *TableList = Table, *TableListEnd = Table + Count; TableList < TableListEnd; ++TableList)
@@ -818,7 +818,7 @@ void _SET_ReverseTranslation(void *Struct, const DIC_Dict *Dict, const SET_Trans
     }
 }
 
-void _SET_ReverseTranslationList(void *List, const SET_DataList *DataList, const SET_TranslationTable *Table)
+void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_TranslationTable *Table)
 {
     // If it is no deeper, free the rest
     if (DataList->depth == 1)

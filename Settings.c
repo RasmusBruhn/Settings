@@ -1,14 +1,50 @@
 #include <stdio.h>
 #include <Files.h>
 #include <Dictionary.h>
+#include <stddef.h>
 #include "Settings.h"
 
-void PrintCodeStruct(SET_CodeStruct *Struct);
+struct Sub {
+    double *sub1;
+    double sub2;
+    int32_t *sub3;
+};
+
+struct Struct1 {
+    double option1;
+    float option2;
+    char option3;
+    char *option4;
+    struct Sub option5;
+    char option6;
+    char *option7;
+};
+
+#define SUBCOUNT 3
+SET_TranslationTable SubTable[SUBCOUNT] = {
+    {.name = "Sub1", .type = SET_DATATYPE_DOUBLE, .depth = 1, .offset = offsetof(struct Sub, sub1)},
+    {.name = "Sub2", .type = SET_DATATYPE_DOUBLE, .depth = 0, .offset = offsetof(struct Sub, sub2)},
+    {.name = "Sub3", .type = SET_DATATYPE_INT32, .depth = 1, .offset = offsetof(struct Sub, sub3)}
+};
+
+#define STRUCTCOUNT 7
+SET_TranslationTable StructTable[STRUCTCOUNT] = {
+    {.name = "Option1", .type = SET_DATATYPE_DOUBLE, .depth = 0, .offset = offsetof(struct Struct1, option1)},
+    {.name = "Option2", .type = SET_DATATYPE_FLOAT, .depth = 0, .offset = offsetof(struct Struct1, option2)},
+    {.name = "Option3", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option3)},
+    {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
+    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
+    {.name = "Option6", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
+    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)},
+};
+
+void PrintCodeStruct(SET_CodeStruct * Struct);
 void PrintCodeList(SET_CodeList *Struct);
 void PrintCodeValue(SET_CodeValue *Struct);
 void PrintDataStruct(DIC_Dict *Dict);
 void PrintDataList(SET_DataList *List);
 void PrintDataValue(SET_Data *Value);
+void PrintStruct(struct Struct1 *Struct);
 
 int main(int argc, char **argv)
 {
@@ -65,6 +101,32 @@ int main(int argc, char **argv)
     printf("Successfully loaded\n\n");
 
     PrintDataStruct(Dict);
+
+    printf("\n\n");
+
+    // Convert to a struct
+    extern SET_TranslationTable StructTable[];
+
+    struct Struct1 Struct;
+
+    Struct.option1 = 0;
+    Struct.option2 = 0;
+    Struct.option3 = '\0';
+    Struct.option4 = NULL;
+    Struct.option5.sub1 = NULL;
+    Struct.option5.sub2 = 0;
+    Struct.option5.sub3 = NULL;
+    Struct.option6 = '\0';
+    Struct.option7 = NULL;
+
+    if (!SET_Translate(&Struct, Dict, StructTable, STRUCTCOUNT, SET_TRANSLATIONMODE_NONE))
+    {
+        printf("Unable to translate settings: %s\n", SET_GetError());
+        return 0;
+    }
+
+    // Print struct
+    PrintStruct(&Struct);
 
     SET_DestroyDataStruct(Dict);
 
@@ -214,4 +276,9 @@ void PrintDataValue(SET_Data *Value)
             printf("Error, unknown type: %u\n", Value->type);
             break;
     }
+}
+
+void PrintStruct(struct Struct1 *Struct)
+{
+    printf("{.option1 = %f, .option2 = %f, .option3 = \'%c\', .option4 = \"%s\", .option5 = {.sub1 = [%f, %f, %f], .sub2 = %f, .sub3 = [%d, %d, %d]}, .option6 = \'%c\', .option7 = \"%s\"}", Struct->option1, Struct->option2, Struct->option3, Struct->option4, Struct->option5.sub1[0], Struct->option5.sub1[1], Struct->option5.sub1[2], Struct->option5.sub2, Struct->option5.sub3[0], Struct->option5.sub3[1], Struct->option5.sub3[2], Struct->option6, Struct->option7);
 }
