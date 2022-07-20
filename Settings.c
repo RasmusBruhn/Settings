@@ -18,6 +18,7 @@ struct Struct1 {
     struct Sub option5;
     char option6;
     char *option7;
+    uint32_t option8;
 };
 
 #define SUBCOUNT 3
@@ -27,7 +28,7 @@ SET_TranslationTable SubTable[SUBCOUNT] = {
     {.name = "Sub3", .type = SET_DATATYPE_INT32, .depth = 1, .offset = offsetof(struct Sub, sub3)}
 };
 
-#define STRUCTCOUNT 7
+#define STRUCTCOUNT 8
 SET_TranslationTable StructTable[STRUCTCOUNT] = {
     {.name = "Option1", .type = SET_DATATYPE_DOUBLE, .depth = 0, .offset = offsetof(struct Struct1, option1)},
     {.name = "Option2", .type = SET_DATATYPE_FLOAT, .depth = 0, .offset = offsetof(struct Struct1, option2)},
@@ -35,7 +36,8 @@ SET_TranslationTable StructTable[STRUCTCOUNT] = {
     {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
     {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
     {.name = "Option6", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
-    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)}
+    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)},
+    {.name = "Option8", .type = SET_DATATYPE_UINT32, .depth = 0, .offset = offsetof(struct Struct1, option8)}
 };
 
 SET_TranslationTable FillTable[STRUCTCOUNT] = {
@@ -45,7 +47,8 @@ SET_TranslationTable FillTable[STRUCTCOUNT] = {
     {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
     {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
     {.name = "Option6wrong", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
-    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)}
+    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)},
+    {.name = "Option8", .type = SET_DATATYPE_UINT32, .depth = 0, .offset = offsetof(struct Struct1, option8)}
 };
 
 SET_TranslationTable EmptyTable[STRUCTCOUNT - 1] = {
@@ -54,7 +57,8 @@ SET_TranslationTable EmptyTable[STRUCTCOUNT - 1] = {
     {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
     {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
     {.name = "Option6", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
-    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)}
+    {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)},
+    {.name = "Option8", .type = SET_DATATYPE_UINT32, .depth = 0, .offset = offsetof(struct Struct1, option8)}
 };
 
 void PrintCodeStruct(SET_CodeStruct * Struct);
@@ -343,5 +347,5 @@ void PrintDataValue(SET_Data *Value)
 
 void PrintStruct(struct Struct1 *Struct)
 {
-    printf("{.option1 = %f, .option2 = %f, .option3 = \'%c\', .option4 = \"%s\", .option5 = {.sub1 = [%f, %f, %f], .sub2 = %f, .sub3 = [%d, %d, %d]}, .option6 = \'%c\', .option7 = \"%s\"}", Struct->option1, Struct->option2, Struct->option3, Struct->option4, Struct->option5.sub1[0], Struct->option5.sub1[1], Struct->option5.sub1[2], Struct->option5.sub2, Struct->option5.sub3[0], Struct->option5.sub3[1], Struct->option5.sub3[2], Struct->option6, Struct->option7);
+    printf("{.option1 = %f, .option2 = %f, .option3 = \'%c\', .option4 = \"%s\", .option5 = {.sub1 = [%f, %f, %f], .sub2 = %f, .sub3 = [%d, %d, %d]}, .option6 = \'%c\', .option7 = \"%s\", .option8 = %u}", Struct->option1, Struct->option2, Struct->option3, Struct->option4, Struct->option5.sub1[0], Struct->option5.sub1[1], Struct->option5.sub1[2], Struct->option5.sub2, Struct->option5.sub3[0], Struct->option5.sub3[1], Struct->option5.sub3[2], Struct->option6, Struct->option7, Struct->option8);
 }

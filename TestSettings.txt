@@ -10,3 +10,4 @@ Option5 = {
 };
 Option6 = '\\';
 Option7 = "\"\'\tTest\s\\\n";
+bool Option8 = true;

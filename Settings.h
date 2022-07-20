@@ -132,7 +132,8 @@ enum _SET_ErrorID {
     _SET_ERRORID_TRANSLATEELEMENT_STRINGMATCH = 0x3001C0205,
     _SET_ERRORID_TRANSLATEELEMENT_STRINGMALLOC = 0x3001C0206,
     _SET_ERRORID_TRANSLATEELEMENT_CONVERTVALUE = 0x3001C0207,
-    _SET_ERRORID_TRANSLATEELEMENT_UNKNOWNTYPE = 0x3001C0208
+    _SET_ERRORID_TRANSLATEELEMENT_UNKNOWNTYPE = 0x3001C0208,
+    _SET_ERRORID_CONVERTBOOL_CORRECT = 0x3001D0200
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -212,6 +213,7 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_CONVERTLIST2 "Unable to convert list (%s: %lu)"
 #define _SET_ERRORMES_TRANSLATELIST "Unable to translate list"
 #define _SET_ERRORMES_TRANSLATEITEM "Unable to translate item (%s)"
+#define _SET_ERRORMES_ILLIGALBOOL "A bool should be either false (0) or true (1) (Received: %s)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -222,6 +224,7 @@ enum __SET_ValueType {
 enum __SET_DataType {
     SET_DATATYPE_NONE,
     SET_DATATYPE_INT,
+    SET_DATATYPE_BOOL,
     SET_DATATYPE_INT8,
     SET_DATATYPE_UINT8,
     SET_DATATYPE_INT16,
@@ -244,11 +247,12 @@ enum __SET_DataType {
 
 enum __SET_DataTypeBase {
     SET_DATATYPEBASE_NONE = 0x00,
-    SET_DATATYPEBASE_UINT = 0x01,
-    SET_DATATYPEBASE_SINT = 0x02,
-    SET_DATATYPEBASE_FLOAT = 0x04,
-    SET_DATATYPEBASE_CHAR = 0x08,
-    SET_DATATYPEBASE_STRING = 0x10
+    SET_DATATYPEBASE_BOOL = 0x01,
+    SET_DATATYPEBASE_UINT = 0x02,
+    SET_DATATYPEBASE_SINT = 0x04,
+    SET_DATATYPEBASE_FLOAT = 0x08,
+    SET_DATATYPEBASE_CHAR = 0x10,
+    SET_DATATYPEBASE_STRING = 0x20
 };
 
 enum __SET_TranslationMode {
@@ -272,6 +276,7 @@ typedef struct __SET_CodeList SET_CodeList;
 typedef struct __SET_TranslationTable SET_TranslationTable;
 
 union ___SET_Data {
+    bool b;
     uint8_t u8;
     uint16_t u16;
     uint32_t u32;
@@ -343,13 +348,16 @@ uint32_t _SET_SpecialCharLength = 28;
 char _SET_SpecialChar[] = {';', ':', '=', '+', '-', '*', '/', '%', '?', '^', '<', '>', '!', '~', '|', '&', '\\', '$', '#', '@', '.', ',', '(', ')', '[', ']', '{', '}'};
 
 // Types
-#define _SET_TYPECOUNT 14
-char *_SET_TypeNames[_SET_TYPECOUNT] = {"int", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float", "double", "char", "str", "struct"};
-SET_DataType _SET_Types[_SET_TYPECOUNT] = {SET_DATATYPE_INT, SET_DATATYPE_UINT8, SET_DATATYPE_UINT16, SET_DATATYPE_UINT32, SET_DATATYPE_UINT64, SET_DATATYPE_SINT8, SET_DATATYPE_SINT16, SET_DATATYPE_SINT32, SET_DATATYPE_SINT64, SET_DATATYPE_FLOAT, SET_DATATYPE_DOUBLE, SET_DATATYPE_CHAR, SET_DATATYPE_STR, SET_DATATYPE_STRUCT};
+#define _SET_TYPECOUNT 15
+char *_SET_TypeNames[_SET_TYPECOUNT] = {"bool", "int", "uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float", "double", "char", "str", "struct"};
+SET_DataType _SET_Types[_SET_TYPECOUNT] = {SET_DATATYPE_BOOL, SET_DATATYPE_INT, SET_DATATYPE_UINT8, SET_DATATYPE_UINT16, SET_DATATYPE_UINT32, SET_DATATYPE_UINT64, SET_DATATYPE_SINT8, SET_DATATYPE_SINT16, SET_DATATYPE_SINT32, SET_DATATYPE_SINT64, SET_DATATYPE_FLOAT, SET_DATATYPE_DOUBLE, SET_DATATYPE_CHAR, SET_DATATYPE_STR, SET_DATATYPE_STRUCT};
 DIC_Dict *_SET_TypeDict = NULL;
 
 #define _SET_LINEPREMES "Line"
 #define _SET_ELEMENTPREMES "Element"
+
+#define _SET_TRUENAME "true"
+#define _SET_FALSENAME "false"
 
 // Highest numbers
 #define _SET_HIGH_UINT8 0xFF
@@ -390,6 +398,9 @@ SET_DataType _SET_ReadType(const char *Type);
 
 // Converts data to a specific type, does not convert lists or structs
 SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type);
+
+// Converts a string to a bool
+SET_Data _SET_ConvertBool(const char *String);
 
 // Converts a string to an unsigned int
 SET_Data _SET_ConvertUint(const char *String);
@@ -1578,6 +1589,10 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
     bool Dot = false;
     bool Exp = false;
 
+    // Check for a bool
+    if (strcmp(Value, _SET_TRUENAME) == 0 || strcmp(Value, _SET_FALSENAME) == 0)
+        return SET_DATATYPEBASE_BOOL;
+
     // Do the start
     switch (*Current)
     {
@@ -1625,6 +1640,10 @@ SET_DataTypeBase _SET_GetPossibleType(const char *Value)
             --Current;
             break;
     }
+
+    // Add bool
+    if (strlen(Value) == 1 && (*Value == '0' || *Value == '1'))
+        Type |= SET_DATATYPEBASE_BOOL;
 
     ++Current;
 
@@ -1904,10 +1923,10 @@ SET_DataList *_SET_ConvertList(const SET_CodeList *List, SET_DataType Type, uint
         }
 
         // Check for numbers
-        else if ((*ValueList)->type >= SET_DATATYPE_INT8 && (*ValueList)->type <= SET_DATATYPE_FLOAT)
+        else if ((*ValueList)->type >= SET_DATATYPE_BOOL && (*ValueList)->type <= SET_DATATYPE_FLOAT)
         {
             // Make sure it is supposed to be a number
-            if (!(CommonType >= SET_DATATYPE_INT8 && CommonType <= SET_DATATYPE_DOUBLE))
+            if (!(CommonType >= SET_DATATYPE_BOOL && CommonType <= SET_DATATYPE_DOUBLE))
             {
                 _SET_SetError(_SET_ERRORID_CONVERTLIST_NUMBERELEMENT, _SET_ERRORMES_NUMBERELEMENT, _SET_ELEMENTPREMES, ValueList - ListObject->list);
                 SET_DestroyDataList(ListObject);
@@ -2055,6 +2074,9 @@ SET_Data *_SET_ConvertValue(const SET_CodeValue *Value, SET_DataType Type, uint8
             else if (PossibleType & SET_DATATYPEBASE_STRING)
                 *Data = _SET_ConvertString(Value->value.value);
 
+            else if (PossibleType & SET_DATATYPEBASE_BOOL)
+                *Data = _SET_ConvertBool(Value->value.value);
+
             else if (PossibleType & SET_DATATYPEBASE_UINT)
                 *Data = _SET_ConvertUint(Value->value.value);
 
@@ -2182,7 +2204,7 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
     // Make sure the number match up
     else if (Type >= SET_DATATYPE_INT && Type <= SET_DATATYPE_FLOAT)
     {
-        if (!(Data->type >= SET_DATATYPE_INT8 && Data->type <= SET_DATATYPE_FLOAT))
+        if (!(Data->type >= SET_DATATYPE_BOOL && Data->type <= SET_DATATYPE_FLOAT))
         {
             _SET_SetError(_SET_ERRORID_CONVERTTYPE_NUMBERMATCH, _SET_ERRORMES_NUMBERMATCH, Data->type);
             return NewData;
@@ -2252,6 +2274,12 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
         case (SET_DATATYPE_CHAR):
         case (SET_DATATYPE_STR):
             return *Data;
+
+        // If it is an bool
+        case (SET_DATATYPE_BOOL):
+            Uint = (uint64_t)Data->data.b;
+            UseUint = true;
+            break;
 
         // If an unsigned int
         case (SET_DATATYPE_INT8):
@@ -2344,6 +2372,11 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
     // Convert to the correct type
     switch (Type)
     {
+        // Bool
+        case (SET_DATATYPE_BOOL):
+            NewData.data.b = (bool)Uint;
+            break;
+
         // Unsigned int
         case (SET_DATATYPE_INT8):
         case (SET_DATATYPE_UINT8):
@@ -2396,6 +2429,29 @@ SET_Data _SET_ConvertType(SET_Data *Data, SET_DataType Type)
     }
 
     return NewData;
+}
+
+SET_Data _SET_ConvertBool(const char *String)
+{
+    // Go through different cases
+    size_t Length = strlen(String);
+    SET_Data Data;
+    SET_InitData(&Data);
+
+    if ((Length == 1 && *String == '0') || strcmp(String, _SET_FALSENAME) == 0)
+        Data.data.b = false;
+
+    else if ((Length == 1 && *String == '1') || strcmp(String, _SET_TRUENAME) == 0)
+        Data.data.b = true;
+
+    else
+    {
+        _SET_SetError(_SET_ERRORID_CONVERTBOOL_CORRECT, _SET_ERRORMES_ILLIGALBOOL, String);
+        return Data;
+    }
+
+    Data.type = SET_DATATYPE_BOOL;
+    return Data;
 }
 
 SET_Data _SET_ConvertUint(const char *String)
