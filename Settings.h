@@ -2670,6 +2670,7 @@ SET_Data _SET_ReadSint(const char *String)
     // Convert to signed int
     Value.data.i64 = (int64_t)Value.data.u64 * ((Negative) ? (-1) : (1));
     Value.type = SET_DATATYPE_SINT64;
+    return Value;
 }
 
 SET_Data _SET_ConvertSint(const char *String)
