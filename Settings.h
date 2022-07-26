@@ -242,7 +242,10 @@ enum __SET_DataType {
     SET_DATATYPE_CHAR,
     SET_DATATYPE_STR,
     SET_DATATYPE_STRUCT,
-    SET_DATATYPE_LIST
+    SET_DATATYPE_LIST,
+    SET_DATATYPE_BUILTIN_LENGTH,
+    SET_DATATYPE_BUILTIN_DEPTH,
+    SET_DATATYPE_BUILTIN_TYPE
 };
 
 enum __SET_DataTypeBase {
@@ -265,7 +268,7 @@ typedef union ___SET_Data _SET_Data;
 typedef struct __SET_Data SET_Data;
 typedef struct __SET_DataList SET_DataList;
 typedef DIC_Dict SET_DataStruct;
-typedef enum __SET_DataType SET_DataType;
+typedef uint32_t SET_DataType;
 typedef enum __SET_ValueType SET_ValueType;
 typedef enum __SET_DataTypeBase SET_DataTypeBase;
 typedef enum __SET_TranslationMode SET_TranslationMode;
@@ -639,8 +642,20 @@ void *_SET_TranslateList(SET_DataList *DataList, const SET_TranslationTable *Tab
 bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode)
 {
     // Figure out what type it is
+    // Bultin
+    if (Table->type == SET_DATATYPE_BUILTIN_TYPE)
+        *(SET_DataType *)Struct = Table->type;
+
+    else if (Table->type == SET_DATATYPE_BUILTIN_DEPTH)
+        *(uint8_t *)Struct = Table->depth;
+
+    else if (Table->type == SET_DATATYPE_BUILTIN_LENGTH)
+    {
+        
+    }
+    
     // List
-    if (Depth > 0)
+    else if (Depth > 0)
     {
         // Make sure the depth is correct
         if (Data->type != SET_DATATYPE_LIST || Depth != Data->data.list->depth)
