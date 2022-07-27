@@ -6,7 +6,7 @@ Option1 = 1;Option2= 9.5; // Comment 1
 Option5 = {
     Sub1 = [-1, 2, 3.];
     double Sub2 = -5e-2;
-    int *Sub3 = [1, 0x1A, 0b1001];
+    int **Sub3 = [[1, 0x1A, 0b1001]];
 };
 Option6 = '\\';
 Option7 = "\"\'\tTest\s\\\n";

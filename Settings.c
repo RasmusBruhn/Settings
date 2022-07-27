@@ -7,7 +7,13 @@
 struct Sub {
     double *sub1;
     double sub2;
-    int32_t *sub3;
+    int32_t **sub3;
+    SET_DataType type2;
+    SET_DataType type3;
+    uint8_t depth2;
+    uint8_t depth3;
+    uint32_t *length1;
+    SET_Length length2;
 };
 
 struct Struct1 {
@@ -21,11 +27,17 @@ struct Struct1 {
     uint32_t option8;
 };
 
-#define SUBCOUNT 3
+#define SUBCOUNT 9
 SET_TranslationTable SubTable[SUBCOUNT] = {
     {.name = "Sub1", .type = SET_DATATYPE_DOUBLE, .depth = 1, .offset = offsetof(struct Sub, sub1)},
     {.name = "Sub2", .type = SET_DATATYPE_DOUBLE, .depth = 0, .offset = offsetof(struct Sub, sub2)},
-    {.name = "Sub3", .type = SET_DATATYPE_INT32, .depth = 1, .offset = offsetof(struct Sub, sub3)}
+    {.name = "Sub3", .type = SET_DATATYPE_INT32, .depth = 2, .offset = offsetof(struct Sub, sub3)},
+    {.name = "Sub2", .type = SET_DATATYPE_BUILTIN_TYPE, .offset = offsetof(struct Sub, type2)},
+    {.name = "Sub3", .type = SET_DATATYPE_BUILTIN_TYPE, .offset = offsetof(struct Sub, type3)},
+    {.name = "Sub2", .type = SET_DATATYPE_BUILTIN_DEPTH, .offset = offsetof(struct Sub, depth2)},
+    {.name = "Sub3", .type = SET_DATATYPE_BUILTIN_DEPTH, .offset = offsetof(struct Sub, depth3)},
+    {.name = "Sub3", .type = SET_DATATYPE_BUILTIN_LENGTH, .depth = 2, .offset = offsetof(struct Sub, length1)},
+    {.name = "Sub3", .type = SET_DATATYPE_BUILTIN_LENGTH, .depth = 0, .offset = offsetof(struct Sub, length2)}
 };
 
 #define STRUCTCOUNT 8
@@ -34,7 +46,7 @@ SET_TranslationTable StructTable[STRUCTCOUNT] = {
     {.name = "Option2", .type = SET_DATATYPE_FLOAT, .depth = 0, .offset = offsetof(struct Struct1, option2)},
     {.name = "Option3", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option3)},
     {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
-    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
+    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(struct Sub), .count = SUBCOUNT},
     {.name = "Option6", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
     {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)},
     {.name = "Option8", .type = SET_DATATYPE_UINT32, .depth = 0, .offset = offsetof(struct Struct1, option8)}
@@ -45,7 +57,7 @@ SET_TranslationTable FillTable[STRUCTCOUNT] = {
     {.name = "Option2", .type = SET_DATATYPE_FLOAT, .depth = 0, .offset = offsetof(struct Struct1, option2)},
     {.name = "Option3", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option3)},
     {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
-    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
+    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(struct Sub), .count = SUBCOUNT},
     {.name = "Option6wrong", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
     {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)},
     {.name = "Option8", .type = SET_DATATYPE_UINT32, .depth = 0, .offset = offsetof(struct Struct1, option8)}
@@ -55,7 +67,7 @@ SET_TranslationTable EmptyTable[STRUCTCOUNT - 1] = {
     {.name = "Option1", .type = SET_DATATYPE_DOUBLE, .depth = 0, .offset = offsetof(struct Struct1, option1)},
     {.name = "Option3", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option3)},
     {.name = "Option4", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option4)},
-    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(SubTable), .count = SUBCOUNT},
+    {.name = "Option5", .type = SET_DATATYPE_STRUCT, .depth = 0, .offset = offsetof(struct Struct1, option5), .sub = SubTable, .size = sizeof(struct Sub), .count = SUBCOUNT},
     {.name = "Option6", .type = SET_DATATYPE_CHAR, .depth = 0, .offset = offsetof(struct Struct1, option6)},
     {.name = "Option7", .type = SET_DATATYPE_STR, .depth = 0, .offset = offsetof(struct Struct1, option7)},
     {.name = "Option8", .type = SET_DATATYPE_UINT32, .depth = 0, .offset = offsetof(struct Struct1, option8)}
@@ -139,6 +151,13 @@ int main(int argc, char **argv)
     Struct.option5.sub1 = NULL;
     Struct.option5.sub2 = 0;
     Struct.option5.sub3 = NULL;
+    Struct.option5.type2 = SET_DATATYPE_NONE;
+    Struct.option5.type3 = SET_DATATYPE_NONE;
+    Struct.option5.depth2 = 0;
+    Struct.option5.depth3 = 0;
+    Struct.option5.length1 = NULL;
+    Struct.option5.length2.count = 0;
+    Struct.option5.length2.sub = NULL;
     Struct.option6 = '\0';
     Struct.option7 = NULL;
 
@@ -153,7 +172,10 @@ int main(int argc, char **argv)
 
     free(Struct.option4);
     free(Struct.option5.sub1);
+    free(Struct.option5.sub3[0]);
     free(Struct.option5.sub3);
+    free(Struct.option5.length1);
+    SET_CleanLength(&Struct.option5.length2);
 
     Struct.option1 = 0;
     Struct.option2 = 0;
@@ -162,6 +184,13 @@ int main(int argc, char **argv)
     Struct.option5.sub1 = NULL;
     Struct.option5.sub2 = 0;
     Struct.option5.sub3 = NULL;
+    Struct.option5.type2 = SET_DATATYPE_NONE;
+    Struct.option5.type3 = SET_DATATYPE_NONE;
+    Struct.option5.depth2 = 0;
+    Struct.option5.depth3 = 0;
+    Struct.option5.length1 = NULL;
+    Struct.option5.length2.count = 0;
+    Struct.option5.length2.sub = NULL;
     Struct.option6 = '\0';
     Struct.option7 = NULL;
 
@@ -176,7 +205,10 @@ int main(int argc, char **argv)
 
     free(Struct.option4);
     free(Struct.option5.sub1);
+    free(Struct.option5.sub3[0]);
     free(Struct.option5.sub3);
+    free(Struct.option5.length1);
+    SET_CleanLength(&Struct.option5.length2);
 
     // Make sure there are errors
     if (SET_Translate(&Struct, Dict, FillTable, STRUCTCOUNT, SET_TRANSLATIONMODE_FILL))
@@ -347,5 +379,5 @@ void PrintDataValue(SET_Data *Value)
 
 void PrintStruct(struct Struct1 *Struct)
 {
-    printf("{.option1 = %f, .option2 = %f, .option3 = \'%c\', .option4 = \"%s\", .option5 = {.sub1 = [%f, %f, %f], .sub2 = %f, .sub3 = [%d, %d, %d]}, .option6 = \'%c\', .option7 = \"%s\", .option8 = %u}", Struct->option1, Struct->option2, Struct->option3, Struct->option4, Struct->option5.sub1[0], Struct->option5.sub1[1], Struct->option5.sub1[2], Struct->option5.sub2, Struct->option5.sub3[0], Struct->option5.sub3[1], Struct->option5.sub3[2], Struct->option6, Struct->option7, Struct->option8);
+    printf("{.option1 = %f, .option2 = %f, .option3 = \'%c\', .option4 = \"%s\", .option5 = {.sub1 = [%f, %f, %f], .sub2 = %f [type = %u, depth = %u], .sub3 = [[%d, %d, %d]], [type = %u, depth = %u, length1 = %u, length2 = [%u, %p]]}, .option6 = \'%c\', .option7 = \"%s\", .option8 = %u}\n\n", Struct->option1, Struct->option2, Struct->option3, Struct->option4, Struct->option5.sub1[0], Struct->option5.sub1[1], Struct->option5.sub1[2], Struct->option5.sub2, Struct->option5.type2, Struct->option5.depth2, Struct->option5.sub3[0][0], Struct->option5.sub3[0][1], Struct->option5.sub3[0][2], Struct->option5.type3, Struct->option5.depth3, Struct->option5.length1[0], Struct->option5.length2.sub[0].count, Struct->option5.length2.sub[0].sub, Struct->option6, Struct->option7, Struct->option8);
 }

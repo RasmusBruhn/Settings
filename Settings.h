@@ -133,7 +133,15 @@ enum _SET_ErrorID {
     _SET_ERRORID_TRANSLATEELEMENT_STRINGMALLOC = 0x3001C0206,
     _SET_ERRORID_TRANSLATEELEMENT_CONVERTVALUE = 0x3001C0207,
     _SET_ERRORID_TRANSLATEELEMENT_UNKNOWNTYPE = 0x3001C0208,
-    _SET_ERRORID_CONVERTBOOL_CORRECT = 0x3001D0200
+    _SET_ERRORID_TRANSLATEELEMENT_LENGTHMATCH = 0x3001C0209,
+    _SET_ERRORID_TRANSLATEELEMENT_LENGTHERROR = 0x3001C020A,
+    _SET_ERRORID_TRANSLATEELEMENT_LENGTHDEPTH = 0x3001C020B,
+    _SET_ERRORID_TRANSLATEELEMENT_LENGTHERROR2 = 0x3001C020C,
+    _SET_ERRORID_CONVERTBOOL_CORRECT = 0x3001D0200,
+    _SET_ERRORID_TRANSLATEFULLLENGTH_MALLOC = 0x3001E0200,
+    _SET_ERRORID_TRANSLATEFULLLENGTH_SUB = 0x3001E0201,
+    _SET_ERRORID_TRANSLATELENGTH_MALLOC = 0x3001F0200,
+    _SET_ERRORID_TRANSLATELENGTH_SUB = 0x3001F0201
 };
 
 #define _SET_ERRORMES_MALLOC "Unable to allocate memory (Size: %lu)"
@@ -214,6 +222,9 @@ enum _SET_ErrorID {
 #define _SET_ERRORMES_TRANSLATELIST "Unable to translate list"
 #define _SET_ERRORMES_TRANSLATEITEM "Unable to translate item (%s)"
 #define _SET_ERRORMES_ILLIGALBOOL "A bool should be either false (0) or true (1) (Received: %s)"
+#define _SET_ERRORMES_TRANSLATELENGTH "Unable to translate length"
+#define _SET_ERRORMES_LENGTHMATCH "Expected element to translate to be a list but received (Type: %u)"
+#define _SET_ERRORMES_TRANSLATELENGTHDEPTH "The depth of a length cannot be larger than the depth of the list (Max: %u, received: %u)"
 
 enum __SET_ValueType {
     SET_VALUETYPE_VALUE,
@@ -278,6 +289,7 @@ typedef union ___SET_CodeValue _SET_CodeValue;
 typedef struct __SET_CodeStruct SET_CodeStruct;
 typedef struct __SET_CodeList SET_CodeList;
 typedef struct __SET_TranslationTable SET_TranslationTable;
+typedef struct __SET_Length SET_Length;
 
 union ___SET_Data {
     bool b;
@@ -345,6 +357,11 @@ struct __SET_TranslationTable {
     size_t offset; // The offset of the location
     SET_TranslationTable *sub; // The sub translation table list used if Type is struct
     size_t count; // The number of elements in the sub table
+};
+
+struct __SET_Length {
+    SET_Length *sub;
+    uint32_t count;
 };
 
 // List of special characters which should ignore spaces
@@ -449,11 +466,20 @@ void *_SET_TranslateList(SET_DataList *DataList, const SET_TranslationTable *Tab
 // Translate a single element
 bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTable *Table, uint8_t Depth, SET_TranslationMode Mode);
 
+// Translate a full length
+bool _SET_TranslateFullLength(SET_Length *Length, SET_DataList *List);
+
+// Translate a single layer of lengths
+bool _SET_TranslateLength(void *Length, SET_DataList *List, uint8_t Depth);
+
 // Reverse the work done during translation
 void _SET_ReverseTranslation(void *Struct, SET_DataStruct *Dict, const SET_TranslationTable *Table, size_t Count);
 
 // Free a translation list
 void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_TranslationTable *Table);
+
+// Free a translation length
+void _SET_ReverseTranslationLength(void *Length, SET_DataList *List, uint8_t Depth);
 
 // Initialize structs
 void SET_InitData(SET_Data *Struct);
@@ -463,6 +489,17 @@ void SET_InitCodeName(SET_CodeName *Struct);
 void SET_InitCodeValue(SET_CodeValue *Struct);
 void SET_InitCodeList(SET_CodeList *Struct);
 void SET_InitTranslationTable(SET_TranslationTable *Struct);
+void SET_InitLength(SET_Length *Struct);
+
+// Clean functions
+void SET_CleanData(SET_Data *Struct);
+void SET_CleanDataList(SET_DataList *Struct);
+void SET_CleanDataStruct(SET_DataStruct *Struct);
+void SET_CleanCodeStruct(SET_CodeStruct *Struct);
+void SET_CleanCodeName(SET_CodeName *Struct);
+void SET_CleanCodeValue(SET_CodeValue *Struct);
+void SET_CleanCodeList(SET_CodeList *Struct);
+void SET_CleanLength(SET_Length *Struct);
 
 // Destroy struct
 void SET_DestroyData(SET_Data *Struct);
@@ -472,6 +509,7 @@ void SET_DestroyCodeStruct(SET_CodeStruct *Struct);
 void SET_DestroyCodeName(SET_CodeName *Struct);
 void SET_DestroyCodeValue(SET_CodeValue *Struct);
 void SET_DestroyCodeList(SET_CodeList *Struct);
+void SET_DestroyLength(SET_Length *Struct);
 
 bool SET_Translate(void *Struct, SET_DataStruct *Dict, const SET_TranslationTable *Table, size_t Count, SET_TranslationMode Mode)
 {
@@ -488,7 +526,6 @@ bool SET_Translate(void *Struct, SET_DataStruct *Dict, const SET_TranslationTabl
                 if (TableList >= Table + Count)
                 {
                     _SET_SetError(_SET_ERRORID_TRANSLATE_EMPTY, _SET_ERRORMES_TRANSLATEEMPTY, Link->key);
-                    _SET_ReverseTranslation(Struct, Dict, Table, TableList - Table);
                     return false;
                 }
             }
@@ -644,14 +681,54 @@ bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTa
     // Figure out what type it is
     // Bultin
     if (Table->type == SET_DATATYPE_BUILTIN_TYPE)
-        *(SET_DataType *)Struct = Table->type;
+    {
+        if (Data->type == SET_DATATYPE_LIST)
+            *(SET_DataType *)Struct = Data->data.list->type;
+
+        else
+            *(SET_DataType *)Struct = Data->type;
+    }
 
     else if (Table->type == SET_DATATYPE_BUILTIN_DEPTH)
-        *(uint8_t *)Struct = Table->depth;
+    {
+        if (Data->type == SET_DATATYPE_LIST)
+            *(uint8_t *)Struct = Data->data.list->depth;
+
+        else
+            *(uint8_t *)Struct = 0;
+    }
 
     else if (Table->type == SET_DATATYPE_BUILTIN_LENGTH)
     {
-        
+        if (Data->type != SET_DATATYPE_LIST)
+        {
+            _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_LENGTHMATCH, _SET_ERRORMES_LENGTHMATCH, Data->type);
+            return false;
+        }
+
+        if (Table->depth == 0)
+        {
+            if (!_SET_TranslateFullLength((SET_Length *)Struct, Data->data.list))
+            {
+                _SET_AddError(_SET_ERRORID_TRANSLATEELEMENT_LENGTHERROR, _SET_ERRORMES_TRANSLATELENGTH);
+                return false;
+            }
+        }
+
+        else
+        {
+            if (Depth > Data->data.list->depth)
+            {
+                _SET_SetError(_SET_ERRORID_TRANSLATEELEMENT_LENGTHDEPTH, _SET_ERRORMES_TRANSLATELENGTHDEPTH, Data->data.list->depth, Depth);
+                return false;
+            }
+
+            if (!_SET_TranslateLength(Struct, Data->data.list, Depth))
+            {
+                _SET_AddError(_SET_ERRORID_TRANSLATEELEMENT_LENGTHERROR2, _SET_ERRORMES_TRANSLATELENGTH);
+                return false;
+            }
+        }
     }
     
     // List
@@ -814,6 +891,77 @@ bool _SET_TranslateElement(void *Struct, SET_Data *Data, const SET_TranslationTa
     return true;
 }
 
+bool _SET_TranslateFullLength(SET_Length *Length, SET_DataList *List)
+{
+    // Set the length
+    Length->count = List->count;
+
+    if (List->depth > 1)
+    {
+        // Allocate memory
+        Length->sub = (SET_Length *)malloc(sizeof(SET_Length) * List->count);
+
+        if (Length->sub == NULL)
+        {
+            _SET_AddErrorForeign(_SET_ERRORID_TRANSLATEFULLLENGTH_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, sizeof(SET_Length) * List->count);
+            return false;
+        }
+
+        // Fill up the sub length
+        SET_Data **ListList = List->list;
+
+        for (SET_Length *LengthList = Length->sub, *EndLengthList = Length->sub + Length->count; LengthList < EndLengthList; ++LengthList, ++ListList)
+            if (!_SET_TranslateFullLength(LengthList, (*ListList)->data.list))
+            {
+                _SET_AddError(_SET_ERRORID_TRANSLATEFULLLENGTH_SUB, _SET_ERRORMES_TRANSLATELENGTH);
+                for (SET_Length *LengthList2 = Length->sub; LengthList2 < LengthList; ++LengthList2)
+                    SET_CleanLength(LengthList2);
+                free(Length->sub);
+                return false;
+            }
+    }
+
+    else
+        Length->sub = NULL;
+
+    return true;
+}
+
+bool _SET_TranslateLength(void *Length, SET_DataList *List, uint8_t Depth)
+{
+    // Set the length if needed
+    if (Depth > 1)
+    {
+        // Allocate memory
+        size_t SubSize = ((Depth > 2) ? (sizeof(void *)) : (sizeof(uint32_t)));
+        void *LengthList = malloc(SubSize * List->count);
+
+        if (LengthList == NULL)
+        {
+            _SET_AddErrorForeign(_SET_ERRORID_TRANSLATELENGTH_MALLOC, strerror(errno), _SET_ERRORMES_MALLOC, SubSize * List->count);
+            return false;
+        }
+
+        // Fill the list
+        SET_Data **DataList = List->list;
+
+        for (void *TempLengthList = LengthList, *EndTempLengthList = LengthList + SubSize * List->count; TempLengthList < EndTempLengthList; TempLengthList += SubSize, ++DataList)
+            if (!_SET_TranslateLength(TempLengthList, (*DataList)->data.list, Depth - 1))
+            {
+                _SET_AddError(_SET_ERRORID_TRANSLATELENGTH_SUB, _SET_ERRORMES_TRANSLATELENGTH);
+                _SET_ReverseTranslationLength(LengthList, List, Depth);
+                return false;
+            }
+
+        *(void **)Length = LengthList;
+    }
+
+    else
+        *(uint32_t *)Length = List->count;
+
+    return true;
+}
+
 void _SET_ReverseTranslation(void *Struct, SET_DataStruct *Dict, const SET_TranslationTable *Table, size_t Count)
 {
     // Go through all of the fields
@@ -828,10 +976,23 @@ void _SET_ReverseTranslation(void *Struct, SET_DataStruct *Dict, const SET_Trans
             continue;
         }
 
-        // If it is a list, free all of it and set to NULL
-        if (TableList->depth > 0)
+        // If it is a builtin method
+        if (TableList->type >= SET_DATATYPE_BUILTIN_LENGTH && TableList->type <= SET_DATATYPE_BUILTIN_TYPE)
         {
-            _SET_ReverseTranslationList(Struct + TableList->offset, Data->data.list, TableList);
+            if (TableList->type == SET_DATATYPE_BUILTIN_LENGTH)
+            {
+                if (TableList->depth == 0)
+                    SET_CleanLength(Struct + TableList->offset);
+
+                else if (TableList->depth > 1)
+                    _SET_ReverseTranslationLength(*((void **)Struct + TableList->offset), Data->data.list, TableList->depth);
+            }
+        }
+
+        // If it is a list, free all of it and set to NULL
+        else if (TableList->depth > 0)
+        {
+            _SET_ReverseTranslationList(*(void **)(Struct + TableList->offset), Data->data.list, TableList);
             free(*(void **)(Struct + TableList->offset));
             *((void **)(Struct + TableList->offset)) = NULL;
         }
@@ -885,6 +1046,20 @@ void _SET_ReverseTranslationList(void *List, SET_DataList *DataList, const SET_T
                 free(*NewList);
             }
     }
+}
+
+void _SET_ReverseTranslationLength(void *Length, SET_DataList *List, uint8_t Depth)
+{
+    // Go through the list
+    if (Depth > 2)
+    {
+        SET_Data **DataList = List->list;
+
+        for (void **LengthList = (void **)Length, **EndLengthList = (void **)Length + List->count; LengthList < EndLengthList; ++LengthList, ++DataList)
+            _SET_ReverseTranslationLength(*LengthList, (*DataList)->data.list, Depth - 1);
+    }
+
+    free(Length);
 }
 
 SET_DataStruct *SET_LoadSettings(const char *FileName)
@@ -2887,6 +3062,7 @@ SET_Data _SET_ConvertString(const char *String)
     return Value;
 }
 
+
 void SET_InitData(SET_Data *Struct)
 {
     Struct->data.stct = NULL;
@@ -2937,7 +3113,14 @@ void SET_InitTranslationTable(SET_TranslationTable *Struct)
     Struct->count = 0;
 }
 
-void SET_DestroyData(SET_Data *Struct)
+void SET_InitLength(SET_Length *Struct)
+{
+    Struct->count = 0;
+    Struct->sub = NULL;
+}
+
+
+void SET_CleanData(SET_Data *Struct)
 {
     switch (Struct->type)
     {
@@ -2959,11 +3142,9 @@ void SET_DestroyData(SET_Data *Struct)
         default:
             break;
     }
-
-    free(Struct);
 }
 
-void SET_DestroyDataList(SET_DataList *Struct)
+void SET_CleanDataList(SET_DataList *Struct)
 {
     if (Struct->list != NULL)
     {
@@ -2973,11 +3154,9 @@ void SET_DestroyDataList(SET_DataList *Struct)
 
         free(Struct->list);
     }
-
-    free(Struct);
 }
 
-void SET_DestroyDataStruct(SET_DataStruct *Struct)
+void SET_CleanDataStruct(SET_DataStruct *Struct)
 {
     for (DIC_LinkList **List = Struct->list, **EndList = Struct->list + Struct->length; List < EndList; ++List)
         for (DIC_LinkList *Link = *List; Link != NULL; Link = Link->next)
@@ -2986,11 +3165,9 @@ void SET_DestroyDataStruct(SET_DataStruct *Struct)
                 SET_DestroyData((SET_Data *)Link->value);
                 Link->value = NULL;
             }
-
-    DIC_DestroyDict(Struct);
 }
 
-void SET_DestroyCodeStruct(SET_CodeStruct *Struct)
+void SET_CleanCodeStruct(SET_CodeStruct *Struct)
 {
     // Go through all of the elements
     if (Struct->values != NULL)
@@ -3010,16 +3187,14 @@ void SET_DestroyCodeStruct(SET_CodeStruct *Struct)
 
         free(Struct->names);
     }
-
-    free(Struct);
 }
 
-void SET_DestroyCodeName(SET_CodeName *Struct)
+void SET_CleanCodeName(SET_CodeName *Struct)
 {
-    free(Struct);
+
 }
 
-void SET_DestroyCodeValue(SET_CodeValue *Struct)
+void SET_CleanCodeValue(SET_CodeValue *Struct)
 {
     switch (Struct->type)
     {
@@ -3040,11 +3215,9 @@ void SET_DestroyCodeValue(SET_CodeValue *Struct)
             _SET_SetError(_SET_ERRORID_DESTROYCODEVALUE_KEY, _SET_ERRORMES_VALUEKEY, Struct->type);
             break;
     }
-
-    free(Struct);
 }
 
-void SET_DestroyCodeList(SET_CodeList *Struct)
+void SET_CleanCodeList(SET_CodeList *Struct)
 {
     if (Struct->list != NULL)
     {
@@ -3054,7 +3227,65 @@ void SET_DestroyCodeList(SET_CodeList *Struct)
 
         free(Struct->list);
     }
+}
 
+void SET_CleanLength(SET_Length *Struct)
+{
+    if (Struct->sub != NULL)
+    {
+        for (SET_Length *LengthList = Struct->sub, *EndLengthList = Struct->sub + Struct->count; LengthList < EndLengthList; ++LengthList)
+            SET_CleanLength(LengthList);
+
+        free(Struct->sub);
+    }
+}
+
+
+void SET_DestroyData(SET_Data *Struct)
+{
+    SET_CleanData(Struct);
+    free(Struct);
+}
+
+void SET_DestroyDataList(SET_DataList *Struct)
+{
+    SET_CleanDataList(Struct);
+    free(Struct);
+}
+
+void SET_DestroyDataStruct(SET_DataStruct *Struct)
+{
+    SET_CleanDataStruct(Struct);
+    DIC_DestroyDict(Struct);
+}
+
+void SET_DestroyCodeStruct(SET_CodeStruct *Struct)
+{
+    SET_CleanCodeStruct(Struct);
+    free(Struct);
+}
+
+void SET_DestroyCodeName(SET_CodeName *Struct)
+{
+    SET_CleanCodeName(Struct);
+    free(Struct);
+}
+
+void SET_DestroyCodeValue(SET_CodeValue *Struct)
+{
+    SET_CleanCodeValue(Struct);
+    free(Struct);
+}
+
+void SET_DestroyCodeList(SET_CodeList *Struct)
+{
+    SET_CleanCodeList(Struct);
+    free(Struct);
+}
+
+void SET_DestroyLength(SET_Length *Struct)
+{
+    SET_CleanLength(Struct);
     free(Struct);
 }
 
